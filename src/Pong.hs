@@ -1,4 +1,4 @@
-module Main where
+module Pong where
 
 import Graphics.Gloss
 
