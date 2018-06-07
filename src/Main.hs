@@ -289,7 +289,7 @@ initialGameState = Game
     , p2Move = Stay
     , paddlesSpeed = 50}
     where
-        ballLoc = (650, 0)
+        ballLoc = (0, 0)
         ballVel = (30 * gameScale, 30 * gameScale)
         radius = 10 * gameScale
 
