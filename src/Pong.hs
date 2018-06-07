@@ -8,22 +8,61 @@ import Graphics.Gloss.Interface.IO.Game
 
 import Graphics.Gloss.Data.Bitmap
 
+import Graphics.Gloss.Data.Vector
+
 import Data.Maybe
 
+import Data.List
+
+--import Test.HUnit
+
+class Collidable a where
+    project :: a -> Vector -> Segment
+    importantPoints :: a -> [Point]
+    importantVectors :: a -> [Vector]
+
+instance Collidable Player where
+    project player v = (minimum cornerProjects, maximum cornerProjects)
+        where
+            cornerProjects = map (dotV v) $ corners player
+
+    importantPoints player = corners player
+
+    importantVectors _ = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+instance Collidable Ball where
+    project ball v = (centerProject - r, centerProject + r)
+        where
+            centerProject = dotV (ballPosition ball) v
+            r = ballRadius ball
+
+    importantPoints ball = [ballPosition ball]
+
+    importantVectors _ = []
+
+data Player = Player
+    { playerPosition :: Point
+    , playerSize :: Point}
+
+data Ball = Ball
+    { ballPosition :: Point
+    , ballRadius :: Float
+    , ballVelocity :: Point}
+
 data PongGame = Game
-    { ballLoc :: (Float, Float)
-    , ballVel :: (Float, Float)
-    , player1 :: Float
-    , player2 :: Float
+    { ball :: Ball
+    , player1 :: Player
+    , player2 :: Player
     , paused :: Bool
     , buttons :: [Button]
     , p1Move :: Move
-    , p2Move :: Move }
+    , p2Move :: Move
+    , paddlesSpeed :: Float}
               | Menu
     { buttons :: [Button] }
               | Finished
-    { player1 :: Float
-    , player2 :: Float
+    { player1 :: Player
+    , player2 :: Player
     , buttons :: [Button]
     , winner :: String}
 
@@ -38,24 +77,47 @@ data Button = InvButton
      , action :: (PongGame -> PongGame)
      }
 
-type RectPos = (Position, Position)
+type Collision = (Vector, Float)
+
+type Segment = (Float, Float)
+
+type RectPos = (Point, Point)
 
 type Radius = Float
 
-type Position = (Float, Float)
+{-
+test1 = TestCase (assertEqual "for collision" Nothing (getCollision testPlayer testBall ))
+
+test2 = TestCase (assertEqual "for corners" [] (corners testPlayer))
+
+tests = TestList [test1, test2]
+
+testBall = Ball (620, 0) (10 * gameScale) (30, 30)
+testPlayer = Player (paddlePlace, 0) (10, 35)
+-}
 
 width, height, offset :: Int
-width  = 1000
+width  = 1500
 height = 1000
 offset = 10
 
-widthF, heightF :: Float
-widthF = fromIntegral width
+size, widthF, heightF :: Float
+widthF  = fromIntegral width
 heightF = fromIntegral height
+size
+    | widthF / 1.5  < heightF = widthF
+    | heightF <= widthF / 1.5 = heightF
 
-scaleX, scaleY :: Float
-scaleX = widthF / 300
-scaleY = heightF / 300
+gameScale :: Float
+gameScale
+    | widthF / 1.5  < heightF  = size / 450
+    | heightF <= widthF / 1.5 = size / 300
+
+wallHeight :: Float
+wallHeight = 150 * gameScale
+
+paddlePlace :: Float
+paddlePlace = 200 * gameScale
 
 window :: Display
 window = InWindow "Pong" (width, height) (offset, offset)
@@ -70,7 +132,7 @@ drawButtons (button : buttons) = pictures
     , drawButtons buttons]
 
 drawButton :: Button -> Picture
-drawButton (Button picture _ _) = scale scaleX scaleY picture
+drawButton (Button picture _ _) = scale gameScale gameScale picture
 drawButton (InvButton _ _) = blank
 
 click :: PongGame -> [Button] -> PongGame
@@ -79,7 +141,7 @@ click game buttons = buttonClick but $ click game buts
     where
         (but : buts) = buttons
 
-buttonsClick :: PongGame -> Position -> PongGame
+buttonsClick :: PongGame -> Point -> PongGame
 buttonsClick game pos
     | length buts == 0 = game
     | otherwise        = click game $ clickedButtons buts pos
@@ -89,13 +151,13 @@ buttonsClick game pos
 buttonClick :: Button -> PongGame -> PongGame
 buttonClick button game = action button game
 
-clickedButtons :: [Button] -> Position -> [Button]
+clickedButtons :: [Button] -> Point -> [Button]
 clickedButtons [] _ = []
 clickedButtons (button : buttons) pos
     | clickedButton button pos = button : clickedButtons buttons pos
     | otherwise                = clickedButtons buttons pos
 
-clickedButton :: Button -> Position -> Bool
+clickedButton :: Button -> Point -> Bool
 clickedButton button (x, y) =
     (x >= bx)  && (x <= bx1) &&
     (y >= by1) && (y <= by)
@@ -110,50 +172,50 @@ mainScreen = pictures [render initialState, buttons]
 
 main :: IO ()
 main = do
-    play window background fps initialState render handleKeys update
+    play window background fps initialState render handleEvents update
     where
         fps :: Int
         fps = 60
 
-handleKeys :: Event -> PongGame -> PongGame
-handleKeys (EventKey (Char 'p') Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) =
+handleEvents :: Event -> PongGame -> PongGame
+handleEvents (EventKey (Char 'p') Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) =
     game {paused = not (paused game)}
-handleKeys _ (game @ (Game _ _ _ _ True _ _ _)) = game
+handleEvents _ (game @ (Game _ _ _ True _ _ _ _)) = game
 
-handleKeys (EventKey (Char 's') Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
+handleEvents (EventKey (Char 's') Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
     = game {p1Move = DownM}
-handleKeys (EventKey (Char 's') Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
+handleEvents (EventKey (Char 's') Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
     | p1Move game == DownM = game {p1Move = Stay}
     | otherwise            = game
 
-handleKeys (EventKey (Char 'w') Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
+handleEvents (EventKey (Char 'w') Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
     = game {p1Move = UpM}
-handleKeys (EventKey (Char 'w') Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
+handleEvents (EventKey (Char 'w') Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
     | p1Move game == UpM   = game {p1Move = Stay}
     | otherwise            = game
 
-handleKeys (EventKey (SpecialKey KeyUp) Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
+handleEvents (EventKey (SpecialKey KeyUp) Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
     = game {p2Move = UpM}
-handleKeys (EventKey (SpecialKey KeyUp) Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
+handleEvents (EventKey (SpecialKey KeyUp) Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
     | p2Move game == UpM   = game {p2Move = Stay}
     | otherwise            = game
 
-handleKeys (EventKey (SpecialKey KeyDown) Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
+handleEvents (EventKey (SpecialKey KeyDown) Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
     = game {p2Move = DownM}
-handleKeys (EventKey (SpecialKey KeyDown) Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
+handleEvents (EventKey (SpecialKey KeyDown) Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
     | p2Move game == DownM = game {p2Move = Stay}
     | otherwise            = game
     
-handleKeys (EventKey (MouseButton LeftButton) Down _ pos) game = buttonsClick game pos
+handleEvents (EventKey (MouseButton LeftButton) Down _ pos) game = buttonsClick game pos
 
-handleKeys _ game = game
+handleEvents _ game = game
     
 update :: Float -> PongGame -> PongGame
 update _ (game @ (Menu _)) = game
 update _ (game @ (Finished _ _ _ _)) = game
 update seconds game
     | paused game = game
-    | otherwise   = checkFinish $ paddleBounce $ wallBounce $ movePaddles seconds $ moveBall seconds game
+    | otherwise   = checkFinish $ bounce $ wallBounce $ movePaddles seconds $ moveBall seconds game
 
 render :: PongGame -> Picture
 render (game @ (Menu _)) = pictures
@@ -165,61 +227,74 @@ render game @ (Finished _ _ _ _) = pictures
     , drawButtons finishButtons
     , win $ winner game]
 render game = pictures
-    [ ball $ ballLoc game
+    [ ballPicture $ ballPosition $ ball game
     , walls
     , paddles (player1 game) (player2 game)]
 
+testStr :: String -> Picture
+testStr str = color white $ text str
+
 win :: String -> Picture
 win winner = 
-    scale (0.1 * scaleX) (0.1 * scaleY) $
+    scale (0.1 * gameScale) (0.1 * gameScale) $
     color white $
     translate (-500) 300 $ 
     text $ winner ++ " wins"
 
-ball :: (Float, Float) -> Picture
-ball (f1, f2) = 
+ballPicture :: (Float, Float) -> Picture
+ballPicture (f1, f2) = 
     translate f1 f2 $ 
-    scale scaleX scaleY $
+    scale gameScale gameScale $
     color ballColor $ 
     circleSolid 10
 ballColor = dark red
 
-walls = pictures [wall (150 * scaleY), wall (-150 * scaleY)]
+walls = pictures [wall wallHeight, wall (-wallHeight)]
 wall :: Float -> Picture
 wall wallOffset =
     translate 0 wallOffset $
-    scale scaleX scaleY $
+    scale gameScale gameScale $
     color wallColor $
-    rectangleSolid 270 10
+    rectangleSolid 400 10
 wallColor = white
 
-paddles :: Float -> Float -> Picture
+paddles :: Player -> Player -> Picture
 paddles player1 player2 = pictures 
-    [ paddle (-120 * scaleX) player1 rose
-    , paddle ( 120 * scaleX) player2 blue]
+    [ paddle player1 rose
+    , paddle player2 blue]
 
-paddle :: Float -> Float -> Color -> Picture
-paddle wallOffset height clr =
+paddle :: Player -> Color -> Picture
+paddle player clr =
     translate wallOffset height $
-    scale scaleX scaleY $
+    --scale gameScale gameScale $
     edge clr
     where
+        (wallOffset, height) = playerPosition player
+
+        (sizex, sizey) = playerSize player
+
         edge :: Color -> Picture
         edge clr = pictures
-            [ color (light clr) $ rectangleSolid 20 70
-            , color (dark clr) $ rectangleSolid 10 50]
+            [ color (light clr) $ rectangleSolid (sizex * 2) (sizey * 2)
+            , color (dark clr) $ rectangleSolid (sizex) (sizey)]
 
 initialGameState :: PongGame  
 initialGameState = Game
-    { ballLoc = (0, 0)
-    , ballVel = (30 * scaleX, 30 * scaleY)
-    , player1 = 0
-    , player2 = 0
+    { ball = Ball ballLoc radius ballVel
+    , player1 = Player (-paddlePlace, 0) (psizex, psizey)
+    , player2 = Player (paddlePlace, 0) (psizex, psizey)
     , paused = False
     , buttons = []
     , p1Move = Stay
     , p2Move = Stay
-    }
+    , paddlesSpeed = 50}
+    where
+        ballLoc = (0, 0)
+        ballVel = (30 * gameScale, 30 * gameScale)
+        radius = 10 * gameScale
+
+        psizex = 10 * gameScale
+        psizey = 35 * gameScale
 
 initialState :: PongGame
 initialState = Menu
@@ -228,7 +303,7 @@ initialState = Menu
 initialButtons :: [Button]
 initialButtons = [startButton]
     where
-        startButton = Button (startButtonPicture) ((-40 * scaleX, 15 * scaleY), (40 * scaleX, -15 * scaleY)) start
+        startButton = Button (startButtonPicture) ((-40 * gameScale, 15 * gameScale), (40 * gameScale, -15 * gameScale)) start
 
 startButtonPicture :: Picture
 startButtonPicture = pictures
@@ -242,8 +317,10 @@ start _ = initialGameState
 finishButtons :: [Button]
 finishButtons = [restartButton, menuButton]
     where
-        restartButton = Button (restartButtonPicture) ((-40 * scaleX, 15 * scaleY), (40 * scaleX, -15 * scaleY)) start
-        menuButton = Button (menuButtonPicture) ((-40 * scaleX, -35 * scaleY), (40 * scaleX, -65 * scaleY)) toMenu
+        restartButton =
+            Button (restartButtonPicture) ((-40 * gameScale, 15 * gameScale), (40 * gameScale, -15 * gameScale)) start
+        menuButton = 
+            Button (menuButtonPicture) ((-40 * gameScale, -35 * gameScale), (40 * gameScale, -65 * gameScale)) toMenu
 
 restartButtonPicture :: Picture
 restartButtonPicture = pictures
@@ -273,51 +350,114 @@ checkFinish game
 
 finish :: PongGame -> Maybe String
 finish game
-    | ballX >  (widthF / 2) - 15 * scaleX = Just "Left player"
-    | ballX < -(widthF / 2) + 15 * scaleX = Just "Right player"
+    | ballX >  paddlePlace + 20 * gameScale = Just "Left player"
+    | ballX < -paddlePlace - 20 * gameScale = Just "Right player"
     | otherwise                           = Nothing
     where
-        (ballX, _) = ballLoc game
+        (ballX, _) = ballPosition $ ball game
 
 movePaddles :: Float -> PongGame -> PongGame
-movePaddles seconds game = game {player1 = p1', player2 = p2'}
+movePaddles seconds game = game {player1 = player1', player2 = player2', paddlesSpeed = speed'}
     where
-        p1 = player1 game
-        p2 = player2 game
-        p1' = 50 * p1move * scaleY + p1
-        p2' = 50 * p2move * scaleY + p2
+        speed = paddlesSpeed game
+        p1 = playerPosition $ player1 game
+        p2 = playerPosition $ player2 game
 
-        p1move
-            | (p1Move game == DownM)
-              && (p1 >= -heightF / 2 + 50 * scaleY)
-              = -seconds
-            | (p1Move game == UpM)
-              && (p1 <= heightF / 2 - 50 * scaleY)
-              = seconds
-            | otherwise = 0
+        p1y = snd p1
+        p2y = snd p2
 
-        p2move
-            | (p2Move game == DownM)
-              && (p2 >= -heightF / 2 + 50 * scaleY)
-              = -seconds
-            | (p2Move game == UpM)
-              && (p2 <= heightF / 2 - 50 * scaleY)
-              = seconds
-            | otherwise = 0
+        p1' = speed * paddleMove seconds p1y (p1Move game) * gameScale + p1y
+        p2' = speed * paddleMove seconds p2y (p2Move game) * gameScale + p2y
+
+        player1' = (player1 game) {playerPosition = (fst p1, p1')}
+        player2' = (player2 game) {playerPosition = (fst p2, p2')}
+
+        speed' = speed + seconds * 5
+
+paddleMove :: Float -> Float -> Move -> Float
+paddleMove seconds player playerMove
+    | (playerMove == DownM)
+        && (player >= -wallHeight + 45 * gameScale) -- -size / 2 + 50 * gameScale)
+        = -seconds
+    | (playerMove == UpM)
+        && (player <=  wallHeight - 45 * gameScale) -- size / 2 - 50 * gameScale)
+        = seconds
+    | otherwise = 0
 
 moveBall :: Float -> PongGame -> PongGame
-moveBall seconds game = game {ballLoc = (x', y')}
+moveBall seconds game = game {ball = ball'}
     where
-        (x, y) = ballLoc game
-        (vx, vy) = ballVel game
+        b = ball game
+        ball' = b {ballVelocity = (vx', vy'), ballPosition = (x', y')}
+        (x, y) = ballPosition b
+        (vx, vy) = ballVelocity b
 
         x' = x + vx * seconds
         y' = y + vy * seconds
 
-paddleBounce :: PongGame -> PongGame
-paddleBounce game = game {ballVel = (vx', vy)}
+        vx'
+            | vx > 0    = vx + seconds * 10
+            | vx < 0    = vx - seconds * 10
+            | otherwise = vx
+        vy'
+            | vy > 0    = vy + seconds * 10
+            | vx < 0    = vy - seconds * 10
+            | otherwise = vy
+
+    {-where
+        ball = ballLoc game
+        ballVector = ballVel game
+        paddle1 = player1 game
+        paddle2 = player2 game
+        
+        str = show normal
+
+        normal = snd $ smallestDepth depths (100000, (0, 0))
+        vector' = ballVector - mulSV (2 * dotV ballVector normal) normal
+
+        play1 = (paddle1, -paddlePlace)
+        play2 = (paddle2, paddlePlace)
+
+        p1Vectors = 
+            snd (smallestVector (getVectors (getPaddleCorners play1) ball) (100000, (0, 0))) :
+            [(1, 0), (0, 1), (-1, 0), (0, -1)]
+        p2Vectors =
+            snd (smallestVector (getVectors (getPaddleCorners play2) ball) (100000, (0, 0))) :
+            [(1, 0), (0, 1), (-1, 0), (0, -1)]
+
+        depths = p1Depths' ++ p2Depths'
+
+        p1Depths'
+            | notNegative p1D >= 3 = p1Ds
+            | otherwise            = []
+            where
+                p1D = [depths | depths <- map fst p1Depths]
+                p1Ds = [depths | depths <- p1Depths, fst depths >= 0]
+        
+        p2Depths'
+            | notNegative p2D >= 3 = p2Ds
+            | otherwise            = []
+            where
+                p2D = [depths | depths <- map fst p2Depths]
+                p2Ds = [depths | depths <- p2Depths, fst depths >= 0]
+
+        p1Depths = collisionDepths play1 ball p1Vectors
+        p2Depths = collisionDepths play2 ball p2Vectors
+
+notNegative :: (Ord a, Num a) => [a] -> Int
+notNegative [] = 0
+notNegative (x : xs)
+    | (x >= 0)  = 1 + (notNegative xs)
+    | otherwise = notNegative xs
+
+collisionDepths :: Player -> Ball -> [Vector] -> [(Float, Vector)]
+collisionDepths _ _ [] = []
+collisionDepths player ball (vector : vectors) = (depth, vector) : collisionDepths player ball vectors
     where
-        radius = 10 * scaleX
+        depth = getCollisionDepth player ball vector
+-}
+{-    where
+        radius = 10 * gameScale
 
         (vx, vy) = ballVel game
 
@@ -335,24 +475,161 @@ paddleCollision game radius =
         leftCollision = yCollision (player1 game)
         rightCollision = yCollision (player2 game)
 
-        yCollision player = (y <= player + 35 * scaleY)
-                         && (y >= player - 35 * scaleY)
-        leftXCollision radius  = x - radius <= -widthF / 2 + 40 * scaleX
-        rightXCollision radius = x + radius >=  widthF / 2 - 40 * scaleX
-
+        yCollision player = (y <= player + 35 * gameScale)
+                         && (y >= player - 35 * gameScale)
+        leftXCollision radius  = x - radius <= -paddlePlace + 10 * gameScale
+        rightXCollision radius = x + radius >=  paddlePlace - 10 * gameScale
+-}
 wallBounce :: PongGame -> PongGame
-wallBounce game = game {ballVel = (vx, vy')}
+wallBounce game = game {ball = ball'}
     where 
-        radius = 10 * scaleY
-
-        (vx, vy) = ballVel game
+        radius = ballRadius b
+        b = ball game
+        (vx, vy) = ballVelocity b
+        ball' = b { ballVelocity = (vx, vy')}
 
         vy' 
-            | wallCollision (ballLoc game) radius = -vy
+            | wallCollision (ballPosition b) radius = -vy
             | otherwise                           =  vy
 
-wallCollision :: Position -> Radius -> Bool
+wallCollision :: Point -> Radius -> Bool
 wallCollision (_, y) radius = topCollision || bottomCollision
     where
-        topCollision    = y + radius >=  heightF / 2 - 5 * scaleY
-        bottomCollision = y - radius <= -heightF / 2 + 5 * scaleY
+        topCollision    = y + radius >=  wallHeight - 5 * gameScale
+        bottomCollision = y - radius <= -wallHeight + 5 * gameScale
+{-
+paddleBounce :: PongGame -> PongGame
+paddleBounce game = 
+-}
+
+bounce :: PongGame -> PongGame
+bounce game = game {ball = ball'}
+    where
+        ball' = b {ballVelocity = reflectedVector, ballPosition = bounceBallPosition}
+        reflectedVector = reflectV ballV normalV
+        b = ball game
+        p1 = player1 game
+        p2 = player2 game
+        ballV = ballVelocity b
+
+        bounceBallPosition = ballPosition b + mulSV (snd minVectorDepth) normalV
+        normalV = fst minVectorDepth
+
+        minVectorDepth
+            | null collisions = (0, 0)
+            | otherwise       = minimumBy secondCompare collisions
+
+        collisions = catMaybes [getCollision p1 b, getCollision p2 b]
+
+reflectV :: Vector -> Vector -> Vector
+reflectV va vb = va - mulSV (2 * dotV va vb) vb
+
+corners :: Player -> [Point]
+corners player = [pos + size, pos - size, pos + size2, pos - size2]
+    where
+        pos = playerPosition player
+        size = playerSize player
+        size2 = (fst size, -(snd size))
+
+getCollisionDepth :: (Collidable a, Collidable b) => a -> b -> Vector -> Float
+getCollisionDepth a b v = snd (project a v) - fst (project b v)
+
+getImportantVectors :: (Collidable a, Collidable b) => a -> b -> [Vector]
+getImportantVectors a b = map normalizeV $ importantVectors a ++ importantVectors b ++ importantVectorsAB
+    where
+        importantVectorsAB = 
+            concat [[p2 - p1, p1 - p2] | 
+            p1 <- importantPoints a, p2 <- importantPoints b]
+
+getCollision :: (Collidable a, Collidable b) => a -> b -> Maybe Collision
+getCollision a b
+    | snd collision < 0 = Nothing
+    | otherwise         = Just collision
+    where
+        collision = minimumBy secondCompare collisions
+        collisions = map (\v -> (v, getCollisionDepth a b v)) $ getImportantVectors a b
+
+secondCompare :: (Num a, Ord a) => (b, a) -> (b, a) -> Ordering
+secondCompare a b = compare (snd a) (snd b)
+
+{-
+getPaddleCorners :: Player -> [Point]
+getPaddleCorners player = [(leftX, upY), (rightX, upY), (rightX, downY), (leftX, downY)]
+    where
+        (pX, pY) = player
+
+        leftX  = pX - 10 * gameScale
+        rightX = pX + 10 * gameScale
+        upY    = pY + 35 * gameScale
+        downY  = pY - 35 * gameScale
+
+getVectors :: [Point] -> Ball -> [Vector]
+getVectors [] _ = []
+getVectors positions ball = (vector : getVectors positions' ball)
+    where
+        (position : positions') = positions
+        vector = normalizeV $ getVector (position, ball)
+
+getVector :: (Point, Point) -> Vector
+getVector vect = (vx, vy)
+    where
+        ((x, y), (x', y')) = vect
+        vx = x' - x
+        vy = y' - y
+
+getLength :: Vector -> Vector -> Float
+getLength vector vector' = magV vector * cos (angleVV vector vector')
+
+getCollisionDepth :: Player -> Ball -> Vector -> Float
+getCollisionDepth player ball vector = collision' --100000
+    where
+        collision'
+            | notNegatives == 1 = max collisionA collisionB
+            | otherwise         = -10
+            where
+                notNegatives = notNegative [collisionA, collisionB]
+
+        collisionA = ballMax - playerMin
+        collisionB = ballMin - playerMax
+ --           , collision playerRightMin ballMin vector
+ --           , collision playerRightMax ballMin vector
+ --           ]
+
+        playerMin = head sortedProjectionCorners
+        playerMax = last sortedProjectionCorners
+
+        sortedProjectionCorners = quicksort projectionCorners
+        projectionCorners = map (dotV vector) corners
+        corners = getPaddleCorners player
+        --[playerLeftMax, playerRightMax, playerRightMin, playerLeftMin] = getPaddleCorners player
+        ballMax = dotV ball vector + radius
+        ballMin = dotV ball vector - radius
+        radius = 10 * gameScale
+
+quicksort :: (Ord a) => [a] -> [a]  
+quicksort [] = []  
+quicksort (x:xs) =   
+    let smallerSorted = quicksort [a | a <- xs, a <= x]  
+        biggerSorted = quicksort [a | a <- xs, a > x]  
+    in  smallerSorted ++ [x] ++ biggerSorted 
+
+smallest :: (Ord a, Num a) => [a] ->  a
+smallest [] = 100000
+smallest [depth] = depth
+smallest (depth : depths) = min depth $ smallest depths --depths depth
+    --depths minDepth
+
+smallestVector :: [Vector] -> (Float, Vector) -> (Float, Vector)
+smallestVector [] length = length
+smallestVector (vector : vectors) (minLength, minVector)
+    | length < minLength = smallestVector vectors (length, vector)
+    | otherwise          = smallestVector vectors (minLength, minVector)
+    where
+        length = magV vector
+
+smallestDepth :: [(Float, Vector)] -> (Float, Vector) -> (Float, Vector)
+smallestDepth [] depth = depth
+smallestDepth ((depth, vector) : depths) (minDepth, minVector)
+    | depth < minDepth = smallestDepth depths (depth, vector)
+    | otherwise        = smallestDepth depths (minDepth, minVector)
+-}
