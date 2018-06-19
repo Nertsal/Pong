@@ -16,17 +16,23 @@ import Data.List
 
 --import Test.HUnit
 
-class Collidable a where
+class Collidable a where 
     project :: a -> Vector -> Segment
     importantPoints :: a -> [Point]
     importantVectors :: a -> [Vector]
 
 instance Collidable Player where
-    project player v = (minimum cornerProjects, maximum cornerProjects)
+    project player v = (minimum projects, maximum projects)
         where
-            cornerProjects = map (dotV v) $ corners player
+            projects = (centerProject + r) : (centerProject - r) : (map (dotV v) $ corners player)
+            centerProject = dotV (playerPosition player) v
+            r
+                | playerR < 0 = playerR - sizex
+                | otherwise   = playerR + sizex
+            playerR = playerRadius player
+            (sizex, _) = playerSize player
 
-    importantPoints player = corners player
+    importantPoints player = (playerPosition player) : corners player
 
     importantVectors _ = [(1, 0), (-1, 0), (0, 1), (0, -1)]
 
@@ -42,17 +48,20 @@ instance Collidable Ball where
 
 data Player = Player
     { playerPosition :: Point
-    , playerSize :: Point}
+    , playerSize :: Point
+    , playerRadius :: Float}
 
 data Ball = Ball
     { ballPosition :: Point
     , ballRadius :: Float
-    , ballVelocity :: Point}
+    , ballVelocity :: Point
+    , ballColor :: Color}
 
 data PongGame = Game
     { ball :: Ball
     , player1 :: Player
     , player2 :: Player
+    , bonus :: Bonus
     , paused :: Bool
     , buttons :: [Button]
     , p1Move :: Move
@@ -68,14 +77,15 @@ data PongGame = Game
 
 data Move = UpM | DownM | Stay deriving (Show, Eq)
 
-data Button = InvButton 
-     { position :: RectPos
-     , action :: (PongGame -> PongGame) }
-            | Button
+data Button = Button
      { picture :: Picture
      , position :: RectPos
-     , action :: (PongGame -> PongGame)
+     , buttonAction :: (PongGame -> PongGame)
      }
+
+data Bonus = Bonus
+    { base :: Ball
+    , bonusAction :: (PongGame -> PongGame)}
 
 type Collision = (Vector, Float)
 
@@ -85,16 +95,7 @@ type RectPos = (Point, Point)
 
 type Radius = Float
 
-{-
-test1 = TestCase (assertEqual "for collision" Nothing (getCollision testPlayer testBall ))
-
-test2 = TestCase (assertEqual "for corners" [] (corners testPlayer))
-
-tests = TestList [test1, test2]
-
-testBall = Ball (620, 0) (10 * gameScale) (30, 30)
-testPlayer = Player (paddlePlace, 0) (10, 35)
--}
+--test1 = TestCase (assertEqual "for collision" True (bonusCollision initialGameState))
 
 width, height, offset :: Int
 width  = 1500
@@ -132,8 +133,7 @@ drawButtons (button : buttons) = pictures
     , drawButtons buttons]
 
 drawButton :: Button -> Picture
-drawButton (Button picture _ _) = scale gameScale gameScale picture
-drawButton (InvButton _ _) = blank
+drawButton button = scale gameScale gameScale (picture button)
 
 click :: PongGame -> [Button] -> PongGame
 click game [] = game
@@ -149,7 +149,7 @@ buttonsClick game pos
         buts = buttons game
 
 buttonClick :: Button -> PongGame -> PongGame
-buttonClick button game = action button game
+buttonClick button game = buttonAction button game
 
 clickedButtons :: [Button] -> Point -> [Button]
 clickedButtons [] _ = []
@@ -178,31 +178,31 @@ main = do
         fps = 60
 
 handleEvents :: Event -> PongGame -> PongGame
-handleEvents (EventKey (Char 'p') Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) =
+handleEvents (EventKey (Char 'p') Down _ _) (game @ (Game _ _ _ _ _ _ _ _ _)) =
     game {paused = not (paused game)}
-handleEvents _ (game @ (Game _ _ _ True _ _ _ _)) = game
+handleEvents _ (game @ (Game _ _ _ _ True _ _ _ _)) = game
 
-handleEvents (EventKey (Char 's') Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
+handleEvents (EventKey (Char 's') Down _ _) (game @ (Game _ _ _ _ _ _ _ _ _)) 
     = game {p1Move = DownM}
-handleEvents (EventKey (Char 's') Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
+handleEvents (EventKey (Char 's') Up _ _) (game @ (Game _ _ _ _ _ _ _ _ _))
     | p1Move game == DownM = game {p1Move = Stay}
     | otherwise            = game
 
-handleEvents (EventKey (Char 'w') Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
+handleEvents (EventKey (Char 'w') Down _ _) (game @ (Game _ _ _ _ _ _ _ _ _)) 
     = game {p1Move = UpM}
-handleEvents (EventKey (Char 'w') Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
+handleEvents (EventKey (Char 'w') Up _ _) (game @ (Game _ _ _ _ _ _ _ _ _))
     | p1Move game == UpM   = game {p1Move = Stay}
     | otherwise            = game
 
-handleEvents (EventKey (SpecialKey KeyUp) Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
+handleEvents (EventKey (SpecialKey KeyUp) Down _ _) (game @ (Game _ _ _ _ _ _ _ _ _)) 
     = game {p2Move = UpM}
-handleEvents (EventKey (SpecialKey KeyUp) Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
+handleEvents (EventKey (SpecialKey KeyUp) Up _ _) (game @ (Game _ _ _ _ _ _ _ _ _))
     | p2Move game == UpM   = game {p2Move = Stay}
     | otherwise            = game
 
-handleEvents (EventKey (SpecialKey KeyDown) Down _ _) (game @ (Game _ _ _ _ _ _ _ _)) 
+handleEvents (EventKey (SpecialKey KeyDown) Down _ _) (game @ (Game _ _ _ _ _ _ _ _ _)) 
     = game {p2Move = DownM}
-handleEvents (EventKey (SpecialKey KeyDown) Up _ _) (game @ (Game _ _ _ _ _ _ _ _))
+handleEvents (EventKey (SpecialKey KeyDown) Up _ _) (game @ (Game _ _ _ _ _ _ _ _ _))
     | p2Move game == DownM = game {p2Move = Stay}
     | otherwise            = game
     
@@ -215,7 +215,7 @@ update _ (game @ (Menu _)) = game
 update _ (game @ (Finished _ _ _ _)) = game
 update seconds game
     | paused game = game
-    | otherwise   = checkFinish $ bounce $ wallBounce $ movePaddles seconds $ moveBall seconds game
+    | otherwise   = checkFinish $ bonusHit $ bounce $ wallBounce $ movePaddles seconds $ moveBall seconds game
 
 render :: PongGame -> Picture
 render (game @ (Menu _)) = pictures
@@ -227,12 +227,13 @@ render game @ (Finished _ _ _ _) = pictures
     , drawButtons finishButtons
     , win $ winner game]
 render game = pictures
-    [ ballPicture $ ballPosition $ ball game
+    [ ballPicture $ ball game
+    , drawBonus $ bonus game
     , walls
     , paddles (player1 game) (player2 game)]
 
-testStr :: String -> Picture
-testStr str = color white $ text str
+drawBonus :: Bonus -> Picture
+drawBonus bonus = ballPicture $ base bonus
 
 win :: String -> Picture
 win winner = 
@@ -241,13 +242,15 @@ win winner =
     translate (-500) 300 $ 
     text $ winner ++ " wins"
 
-ballPicture :: (Float, Float) -> Picture
-ballPicture (f1, f2) = 
-    translate f1 f2 $ 
-    scale gameScale gameScale $
-    color ballColor $ 
-    circleSolid 10
-ballColor = dark red
+ballPicture :: Ball -> Picture
+ballPicture ball = 
+    translate f1 f2 $
+    color bColor $ 
+    circleSolid radius
+    where
+        bColor = ballColor ball
+        (f1, f2) = ballPosition ball
+        radius = ballRadius ball
 
 walls = pictures [wall wallHeight, wall (-wallHeight)]
 wall :: Float -> Picture
@@ -260,14 +263,11 @@ wallColor = white
 
 paddles :: Player -> Player -> Picture
 paddles player1 player2 = pictures 
-    [ paddle player1 rose
-    , paddle player2 blue]
+    [ paddle player1 rose 180
+    , paddle player2 blue 0]
 
-paddle :: Player -> Color -> Picture
-paddle player clr =
-    translate wallOffset height $
-    --scale gameScale gameScale $
-    edge clr
+paddle :: Player -> Color -> Float -> Picture
+paddle player clr rot = translate wallOffset height $ rotate rot $ edge clr
     where
         (wallOffset, height) = playerPosition player
 
@@ -275,14 +275,16 @@ paddle player clr =
 
         edge :: Color -> Picture
         edge clr = pictures
-            [ color (light clr) $ rectangleSolid (sizex * 2) (sizey * 2)
-            , color (dark clr) $ rectangleSolid (sizex) (sizey)]
+            [ color (light clr) $ translate (-sizex) 0 $ arcSolid 90 270 (playerRadius player) --sectorWire arcDegree (360 - arcDegree) (playerRadius player)
+            , color (light clr) $ rectangleSolid (sizex * 2) (sizey * 2)
+            , color (dark clr) $ rectangleSolid sizex sizey]
 
 initialGameState :: PongGame  
 initialGameState = Game
-    { ball = Ball ballLoc radius ballVel
-    , player1 = Player (-paddlePlace, 0) (psizex, psizey)
-    , player2 = Player (paddlePlace, 0) (psizex, psizey)
+    { ball = Ball ballLoc radius ballVel ballClr
+    , player1 = Player (-paddlePlace, 0) (psizex, psizey) pradius
+    , player2 = Player (paddlePlace, 0) (psizex, psizey) (-pradius)
+    , bonus = Bonus (Ball (100, -200) 10 (0, 0) bonusClr) baction
     , paused = False
     , buttons = []
     , p1Move = Stay
@@ -292,9 +294,15 @@ initialGameState = Game
         ballLoc = (0, 0)
         ballVel = (30 * gameScale, 30 * gameScale)
         radius = 10 * gameScale
+        ballClr = dark red
 
-        psizex = 10 * gameScale
-        psizey = 35 * gameScale
+        psizex = 5 * gameScale
+        psizey = 30 * gameScale
+
+        pradius = psizey --psizex + 10 * gameScale
+
+        baction game = game {ball = Ball (0, 0) 50 (-50, -50) (dark red)}
+        bonusClr = dark green
 
 initialState :: PongGame
 initialState = Menu
@@ -486,21 +494,31 @@ wallBounce game = game {ball = ball'}
         radius = ballRadius b
         b = ball game
         (vx, vy) = ballVelocity b
-        ball' = b { ballVelocity = (vx, vy')}
+        (_, by) = ballPosition b
+        ball' = b {ballVelocity = (vx, vy')}
 
         vy' 
-            | wallCollision (ballPosition b) radius = -vy
-            | otherwise                           =  vy
+            | (by < 0) && (vy < 0) && collision
+                || (by > 0) && (vy > 0) && collision = -vy
+            | otherwise                              =  vy
+
+        collision = wallCollision (ballPosition b) radius
 
 wallCollision :: Point -> Radius -> Bool
 wallCollision (_, y) radius = topCollision || bottomCollision
     where
         topCollision    = y + radius >=  wallHeight - 5 * gameScale
         bottomCollision = y - radius <= -wallHeight + 5 * gameScale
-{-
-paddleBounce :: PongGame -> PongGame
-paddleBounce game = 
--}
+
+bonusHit :: PongGame -> PongGame
+bonusHit game
+    | bonusCollision game = bonusAction (bonus game) game
+    | otherwise           = game
+
+bonusCollision :: PongGame -> Bool
+bonusCollision game = isJust collision 
+    where
+        collision = getCollision (base $ bonus game) (ball game)
 
 bounce :: PongGame -> PongGame
 bounce game = game {ball = ball'}
