@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE RecordWildCards #-}
 module Pong (main) where
 
@@ -48,7 +49,8 @@ data Ball = Ball
     , ballVelocity :: Point
     , ballColor    :: Color}
 
-data PongGame = Game
+data PongGame
+  = Game
     { ball         :: Ball
     , player1      :: Player
     , player2      :: Player
@@ -58,9 +60,11 @@ data PongGame = Game
     , p1Move       :: Move
     , p2Move       :: Move
     , paddlesSpeed :: Float}
-              | Menu
+
+  | Menu
     { buttons :: [Button] }
-              | Finished
+
+  | Finished
     { player1 :: Player
     , player2 :: Player
     , buttons :: [Button]
@@ -86,22 +90,20 @@ type RectPos = (Point, Point)
 
 type Radius = Float
 
-width, height, offset :: Int
+width, height, offset :: Num a => a
 width  = 1500
 height = 1000
 offset = 10
 
-size, widthF, heightF :: Float
-widthF  = fromIntegral width
-heightF = fromIntegral height
+size :: Float
 size
-    | widthF / 1.5  < heightF = widthF
-    | heightF <= widthF / 1.5 = heightF
+    | width / 1.5 < height = width
+    | height <= width / 1.5 = height
 
 gameScale :: Float
 gameScale
-    | widthF / 1.5  < heightF  = size / 450
-    | heightF <= widthF / 1.5 = size / 300
+    | width / 1.5  < height  = size / 450
+    | height <= width / 1.5 = size / 300
 
 wallHeight :: Float
 wallHeight = 150 * gameScale
