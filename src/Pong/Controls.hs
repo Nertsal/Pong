@@ -4,6 +4,11 @@ module Pong.Controls where
 import           Graphics.Gloss.Interface.Pure.Game
 import           Pong.Model
 
+handleMoveKey :: Move -> KeyState -> Player -> Player
+handleMoveKey move keyState player = case keyState of
+    Down -> setPlayerMove move player
+    Up   -> unsetPlayerMove move player
+
 handleEvents :: Event -> PongGame -> PongGame
 handleEvents
   (EventKey (Char 'p') Down _ _)
@@ -12,29 +17,17 @@ handleEvents
 
 handleEvents _ game@(GameInProgress Game{ paused = True }) = game
 
-handleEvents (EventKey (Char 's') Down _ _) (GameInProgress game)
-  = GameInProgress game { p1Move = DownM }
-handleEvents (EventKey (Char 's') Up _ _) (GameInProgress game)
-  | p1Move game == DownM = GameInProgress game {p1Move = Stay}
-  | otherwise            = GameInProgress game
+handleEvents (EventKey (Char 's') keyState _ _) (GameInProgress game@Game{..})
+  = GameInProgress game {player1 = handleMoveKey DownM keyState player1 }
 
-handleEvents (EventKey (Char 'w') Down _ _) (GameInProgress game)
-  = GameInProgress game { p1Move = UpM }
-handleEvents (EventKey (Char 'w') Up _ _) (GameInProgress game)
-  | p1Move game == UpM = GameInProgress game {p1Move = Stay}
-  | otherwise          = GameInProgress game
+handleEvents (EventKey (Char 'w') keyState _ _) (GameInProgress game@Game{..})
+  = GameInProgress game { player1 = handleMoveKey UpM keyState player1 }
 
-handleEvents (EventKey (SpecialKey KeyUp) Down _ _) (GameInProgress game)
-  = GameInProgress game { p2Move = UpM }
-handleEvents (EventKey (SpecialKey KeyUp) Up _ _) (GameInProgress game)
-  | p2Move game == UpM = GameInProgress game {p2Move = Stay}
-  | otherwise          = GameInProgress game
+handleEvents (EventKey (SpecialKey KeyUp) keyState _ _) (GameInProgress game@Game{..})
+  = GameInProgress game { player2 = handleMoveKey UpM keyState player2 }
 
-handleEvents (EventKey (SpecialKey KeyDown) Down _ _) (GameInProgress game)
-  = GameInProgress game { p2Move = DownM }
-handleEvents (EventKey (SpecialKey KeyDown) Up _ _) (GameInProgress game)
-  | p2Move game == DownM = GameInProgress game {p2Move = Stay}
-  | otherwise            = GameInProgress game
+handleEvents (EventKey (SpecialKey KeyDown) keyState _ _) (GameInProgress game@Game{..})
+  = GameInProgress game { player2 = handleMoveKey DownM keyState player2 }
 
 handleEvents (EventKey (MouseButton LeftButton) Down _ mouse) game
   = buttonsClick game mouse

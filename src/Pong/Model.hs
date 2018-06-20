@@ -37,13 +37,16 @@ instance Collidable Ball where
 data Player = Player
     { playerPosition :: Point
     , playerSize     :: Point
-    , playerRadius   :: Float}
+    , playerRadius   :: Float
+    , playerMove     :: Move
+    }
 
 data Ball = Ball
     { ballPosition :: Point
     , ballRadius   :: Float
     , ballVelocity :: Point
-    , ballColor    :: Color}
+    , ballColor    :: Color
+    }
 
 data PongGame
   = GameInProgress Game
@@ -57,8 +60,6 @@ data Game = Game
   , bonus        :: Bonus
   , paused       :: Bool
   , gameButtons  :: [Button]
-  , p1Move       :: Move
-  , p2Move       :: Move
   , paddlesSpeed :: Float
   }
 
@@ -137,13 +138,11 @@ update _ game = game
 initialGameState :: PongGame
 initialGameState = GameInProgress Game
     { ball = Ball ballLoc radius ballVel ballClr
-    , player1 = Player (-paddlePlace, 0) (psizex, psizey) pradius
-    , player2 = Player (paddlePlace, 0) (psizex, psizey) (-pradius)
+    , player1 = Player (-paddlePlace, 0) (psizex, psizey) pradius Stay
+    , player2 = Player (paddlePlace, 0) (psizex, psizey) (-pradius) Stay
     , bonus = Bonus (Ball (100, -200) 10 (0, 0) bonusClr) baction
     , paused = False
     , gameButtons = []
-    , p1Move = Stay
-    , p2Move = Stay
     , paddlesSpeed = 50}
     where
         ballLoc = (0, 0)
@@ -228,8 +227,8 @@ movePaddles seconds game = game {player1 = player1', player2 = player2', paddles
         p1y = snd p1
         p2y = snd p2
 
-        p1' = speed * paddleMove seconds p1y (p1Move game) * gameScale + p1y
-        p2' = speed * paddleMove seconds p2y (p2Move game) * gameScale + p2y
+        p1' = speed * paddleMove seconds p1y (playerMove $ player1 game) * gameScale + p1y
+        p2' = speed * paddleMove seconds p2y (playerMove $ player2 game) * gameScale + p2y
 
         player1' = (player1 game) {playerPosition = (fst p1, p1')}
         player2' = (player2 game) {playerPosition = (fst p2, p2')}
@@ -326,3 +325,13 @@ corners player = [pos + size1, pos - size1, pos + size2, pos - size2]
         pos = playerPosition player
         size1 = playerSize player
         size2 = (fst size1, -(snd size1))
+
+setPlayerMove :: Move -> Player -> Player
+setPlayerMove move player = player { playerMove = move }
+
+unsetPlayerMove :: Move -> Player -> Player
+unsetPlayerMove move player@Player { playerMove = oldMove } = player { playerMove = newMove }
+    where
+        newMove
+            | oldMove == move = Stay
+            | otherwise       = oldMove
