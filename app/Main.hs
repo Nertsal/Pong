@@ -1,3 +1,3 @@
-import qualified Pong;
+import qualified Pong
 
 main = Pong.main

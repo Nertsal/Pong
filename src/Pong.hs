@@ -1,13 +1,11 @@
 {-# LANGUAGE RecordWildCards #-}
-module Pong where
+module Pong (main) where
 
 import           Data.List
 import           Data.Maybe
 import           Graphics.Gloss
 import           Graphics.Gloss.Data.Vector
 import           Graphics.Gloss.Interface.IO.Game
-
---import Test.HUnit
 
 class Collidable a where
     project :: a -> Vector -> Segment
@@ -88,8 +86,6 @@ type RectPos = (Point, Point)
 
 type Radius = Float
 
---test1 = TestCase (assertEqual "for collision" True (bonusCollision initialGameState))
-
 width, height, offset :: Int
 width  = 1500
 height = 1000
@@ -156,12 +152,6 @@ clickedButton button (x, y) =
     (y >= by1) && (y <= by)
     where
         ((bx, by), (bx1, by1)) = position button
-
-mainScreen :: Picture
-mainScreen = pictures [render initialState, buttons]
-    where
-        buttons :: Picture
-        buttons = blank
 
 main :: IO ()
 main = do
@@ -271,7 +261,7 @@ paddle player paddleColor rot = translate wallOffset playerHeight $ rotate rot $
 
         edge :: Color -> Picture
         edge clr = pictures
-            [ color (light clr) $ translate (-sizex) 0 $ arcSolid 90 270 (playerRadius player) --sectorWire arcDegree (360 - arcDegree) (playerRadius player)
+            [ color (light clr) $ translate (-sizex) 0 $ arcSolid 90 270 (playerRadius player)
             , color (light clr) $ rectangleSolid (sizex * 2) (sizey * 2)
             , color (dark clr) $ rectangleSolid sizex sizey]
 
@@ -295,7 +285,7 @@ initialGameState = Game
         psizex = 5 * gameScale
         psizey = 30 * gameScale
 
-        pradius = psizey --psizex + 10 * gameScale
+        pradius = psizey
 
         baction game = game {ball = Ball (0, 0) 50 (-50, -50) (dark red)}
         bonusClr = dark green
@@ -385,10 +375,10 @@ movePaddles seconds game = game {player1 = player1', player2 = player2', paddles
 paddleMove :: Float -> Float -> Move -> Float
 paddleMove seconds player playerMove
     | (playerMove == DownM)
-        && (player >= -wallHeight + 45 * gameScale) -- -size / 2 + 50 * gameScale)
+        && (player >= -wallHeight + 45 * gameScale)
         = -seconds
     | (playerMove == UpM)
-        && (player <=  wallHeight - 45 * gameScale) -- size / 2 - 50 * gameScale)
+        && (player <=  wallHeight - 45 * gameScale)
         = seconds
     | otherwise = 0
 
@@ -412,82 +402,6 @@ moveBall seconds game = game {ball = ball'}
             | vx < 0    = vy - seconds * 10
             | otherwise = vy
 
-    {-where
-        ball = ballLoc game
-        ballVector = ballVel game
-        paddle1 = player1 game
-        paddle2 = player2 game
-
-        str = show normal
-
-        normal = snd $ smallestDepth depths (100000, (0, 0))
-        vector' = ballVector - mulSV (2 * dotV ballVector normal) normal
-
-        play1 = (paddle1, -paddlePlace)
-        play2 = (paddle2, paddlePlace)
-
-        p1Vectors =
-            snd (smallestVector (getVectors (getPaddleCorners play1) ball) (100000, (0, 0))) :
-            [(1, 0), (0, 1), (-1, 0), (0, -1)]
-        p2Vectors =
-            snd (smallestVector (getVectors (getPaddleCorners play2) ball) (100000, (0, 0))) :
-            [(1, 0), (0, 1), (-1, 0), (0, -1)]
-
-        depths = p1Depths' ++ p2Depths'
-
-        p1Depths'
-            | notNegative p1D >= 3 = p1Ds
-            | otherwise            = []
-            where
-                p1D = [depths | depths <- map fst p1Depths]
-                p1Ds = [depths | depths <- p1Depths, fst depths >= 0]
-
-        p2Depths'
-            | notNegative p2D >= 3 = p2Ds
-            | otherwise            = []
-            where
-                p2D = [depths | depths <- map fst p2Depths]
-                p2Ds = [depths | depths <- p2Depths, fst depths >= 0]
-
-        p1Depths = collisionDepths play1 ball p1Vectors
-        p2Depths = collisionDepths play2 ball p2Vectors
-
-notNegative :: (Ord a, Num a) => [a] -> Int
-notNegative [] = 0
-notNegative (x : xs)
-    | (x >= 0)  = 1 + (notNegative xs)
-    | otherwise = notNegative xs
-
-collisionDepths :: Player -> Ball -> [Vector] -> [(Float, Vector)]
-collisionDepths _ _ [] = []
-collisionDepths player ball (vector : vectors) = (depth, vector) : collisionDepths player ball vectors
-    where
-        depth = getCollisionDepth player ball vector
--}
-{-    where
-        radius = 10 * gameScale
-
-        (vx, vy) = ballVel game
-
-        vx'
-            | paddleCollision game radius = -vx
-            | otherwise                   =  vx
-
-paddleCollision :: PongGame -> Radius -> Bool
-paddleCollision game radius =
-    (leftXCollision radius  && leftCollision) ||
-    (rightXCollision radius && rightCollision)
-    where
-        (x, y) = ballLoc game
-
-        leftCollision = yCollision (player1 game)
-        rightCollision = yCollision (player2 game)
-
-        yCollision player = (y <= player + 35 * gameScale)
-                         && (y >= player - 35 * gameScale)
-        leftXCollision radius  = x - radius <= -paddlePlace + 10 * gameScale
-        rightXCollision radius = x + radius >=  paddlePlace - 10 * gameScale
--}
 wallBounce :: PongGame -> PongGame
 wallBounce game = game {ball = ball'}
     where
@@ -569,85 +483,3 @@ getCollision a b
 
 secondCompare :: (Num a, Ord a) => (b, a) -> (b, a) -> Ordering
 secondCompare a b = compare (snd a) (snd b)
-
-{-
-getPaddleCorners :: Player -> [Point]
-getPaddleCorners player = [(leftX, upY), (rightX, upY), (rightX, downY), (leftX, downY)]
-    where
-        (pX, pY) = player
-
-        leftX  = pX - 10 * gameScale
-        rightX = pX + 10 * gameScale
-        upY    = pY + 35 * gameScale
-        downY  = pY - 35 * gameScale
-
-getVectors :: [Point] -> Ball -> [Vector]
-getVectors [] _ = []
-getVectors positions ball = (vector : getVectors positions' ball)
-    where
-        (position : positions') = positions
-        vector = normalizeV $ getVector (position, ball)
-
-getVector :: (Point, Point) -> Vector
-getVector vect = (vx, vy)
-    where
-        ((x, y), (x', y')) = vect
-        vx = x' - x
-        vy = y' - y
-
-getLength :: Vector -> Vector -> Float
-getLength vector vector' = magV vector * cos (angleVV vector vector')
-
-getCollisionDepth :: Player -> Ball -> Vector -> Float
-getCollisionDepth player ball vector = collision' --100000
-    where
-        collision'
-            | notNegatives == 1 = max collisionA collisionB
-            | otherwise         = -10
-            where
-                notNegatives = notNegative [collisionA, collisionB]
-
-        collisionA = ballMax - playerMin
-        collisionB = ballMin - playerMax
- --           , collision playerRightMin ballMin vector
- --           , collision playerRightMax ballMin vector
- --           ]
-
-        playerMin = head sortedProjectionCorners
-        playerMax = last sortedProjectionCorners
-
-        sortedProjectionCorners = quicksort projectionCorners
-        projectionCorners = map (dotV vector) corners
-        corners = getPaddleCorners player
-        --[playerLeftMax, playerRightMax, playerRightMin, playerLeftMin] = getPaddleCorners player
-        ballMax = dotV ball vector + radius
-        ballMin = dotV ball vector - radius
-        radius = 10 * gameScale
-
-quicksort :: (Ord a) => [a] -> [a]
-quicksort [] = []
-quicksort (x:xs) =
-    let smallerSorted = quicksort [a | a <- xs, a <= x]
-        biggerSorted = quicksort [a | a <- xs, a > x]
-    in  smallerSorted ++ [x] ++ biggerSorted
-
-smallest :: (Ord a, Num a) => [a] ->  a
-smallest [] = 100000
-smallest [depth] = depth
-smallest (depth : depths) = min depth $ smallest depths --depths depth
-    --depths minDepth
-
-smallestVector :: [Vector] -> (Float, Vector) -> (Float, Vector)
-smallestVector [] length = length
-smallestVector (vector : vectors) (minLength, minVector)
-    | length < minLength = smallestVector vectors (length, vector)
-    | otherwise          = smallestVector vectors (minLength, minVector)
-    where
-        length = magV vector
-
-smallestDepth :: [(Float, Vector)] -> (Float, Vector) -> (Float, Vector)
-smallestDepth [] depth = depth
-smallestDepth ((depth, vector) : depths) (minDepth, minVector)
-    | depth < minDepth = smallestDepth depths (depth, vector)
-    | otherwise        = smallestDepth depths (minDepth, minVector)
--}
