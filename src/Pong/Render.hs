@@ -7,19 +7,19 @@ import           Pong.Const
 import           Pong.Model
 
 render :: PongGame -> Picture
-render (Menu _) = pictures
+render (GameMenu _) = pictures
     [ render initialGameState
     , drawButtons initialButtons]
-render game @ (Finished _ _ _ _) = pictures
-    [ paddles (player1 game) (player2 game)
-    , walls
+render (GameOver GameResult{..}) = pictures
+    [ walls
     , drawButtons finishButtons
-    , win $ winner game]
-render game = pictures
-    [ ballPicture $ ball game
-    , drawBonus $ bonus game
+    , win winner]
+render (GameInProgress Game{..}) = pictures
+    [ ballPicture ball
+    , drawBonus bonus
     , walls
-    , paddles (player1 game) (player2 game)]
+    , paddles player1 player2
+    ]
 
 drawBonus :: Bonus -> Picture
 drawBonus Bonus{..} = ballPicture base

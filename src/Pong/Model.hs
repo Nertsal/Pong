@@ -46,25 +46,29 @@ data Ball = Ball
     , ballColor    :: Color}
 
 data PongGame
-  = Game
-    { ball         :: Ball
-    , player1      :: Player
-    , player2      :: Player
-    , bonus        :: Bonus
-    , paused       :: Bool
-    , buttons      :: [Button]
-    , p1Move       :: Move
-    , p2Move       :: Move
-    , paddlesSpeed :: Float}
+  = GameInProgress Game
+  | GameMenu Menu
+  | GameOver GameResult
 
-  | Menu
-    { buttons :: [Button] }
+data Game = Game
+  { ball         :: Ball
+  , player1      :: Player
+  , player2      :: Player
+  , bonus        :: Bonus
+  , paused       :: Bool
+  , gameButtons  :: [Button]
+  , p1Move       :: Move
+  , p2Move       :: Move
+  , paddlesSpeed :: Float
+  }
 
-  | Finished
-    { player1 :: Player
-    , player2 :: Player
-    , buttons :: [Button]
-    , winner  :: String}
+data Menu = Menu
+  { menuButtons :: [Button] }
+
+data GameResult = GameResult
+  { gameResultButtons :: [Button]
+  , winner            :: String
+  }
 
 data Move = UpM | DownM | Stay deriving (Show, Eq)
 
@@ -76,7 +80,8 @@ data Button = Button
 
 data Bonus = Bonus
     { base        :: Ball
-    , bonusAction :: (PongGame -> PongGame)}
+    , bonusAction :: Game -> Game
+    }
 
 type RectPos = (Point, Point)
 
@@ -104,6 +109,11 @@ buttonsClick game pos
     where
         buts = buttons game
 
+buttons :: PongGame -> [Button]
+buttons (GameInProgress game) = gameButtons game
+buttons (GameMenu menu)       = menuButtons menu
+buttons (GameOver res)        = gameResultButtons res
+
 buttonClick :: Button -> PongGame -> PongGame
 buttonClick button game = buttonAction button game
 
@@ -121,20 +131,19 @@ clickedButton button (x, y) =
         ((bx, by), (bx1, by1)) = position button
 
 update :: Float -> PongGame -> PongGame
-update _ (game @ (Menu _)) = game
-update _ (game @ (Finished _ _ _ _)) = game
-update seconds game
-    | paused game = game
+update seconds (GameInProgress game)
+    | paused game = GameInProgress game
     | otherwise   = checkFinish $ bonusHit $ bounce $ wallBounce $ movePaddles seconds $ moveBall seconds game
+update _ game = game
 
 initialGameState :: PongGame
-initialGameState = Game
+initialGameState = GameInProgress Game
     { ball = Ball ballLoc radius ballVel ballClr
     , player1 = Player (-paddlePlace, 0) (psizex, psizey) pradius
     , player2 = Player (paddlePlace, 0) (psizex, psizey) (-pradius)
     , bonus = Bonus (Ball (100, -200) 10 (0, 0) bonusClr) baction
     , paused = False
-    , buttons = []
+    , gameButtons = []
     , p1Move = Stay
     , p2Move = Stay
     , paddlesSpeed = 50}
@@ -153,8 +162,8 @@ initialGameState = Game
         bonusClr = dark green
 
 initialState :: PongGame
-initialState = Menu
-    { buttons = initialButtons }
+initialState = GameMenu Menu
+    { menuButtons = initialButtons }
 
 initialButtons :: [Button]
 initialButtons = [startButton]
@@ -194,21 +203,19 @@ menuButtonPicture = pictures
 toMenu :: PongGame -> PongGame
 toMenu _ = initialState
 
-checkFinish :: PongGame -> PongGame
+checkFinish :: Game -> PongGame
 checkFinish game =
   case finish game of
-    Just message -> Finished
-      { player1 = p1
-      , player2 = p2
-      , buttons = finishButtons
+    Just message -> GameOver GameResult
+      { gameResultButtons = finishButtons
       , winner = message
       }
-    Nothing -> game
+    Nothing -> GameInProgress game
   where
     p1 = player1 game
     p2 = player2 game
 
-finish :: PongGame -> Maybe String
+finish :: Game -> Maybe String
 finish game
     | ballX >  paddlePlace + 20 * gameScale = Just "Left player"
     | ballX < -paddlePlace - 20 * gameScale = Just "Right player"
@@ -216,7 +223,7 @@ finish game
     where
         (ballX, _) = ballPosition $ ball game
 
-movePaddles :: Float -> PongGame -> PongGame
+movePaddles :: Float -> Game -> Game
 movePaddles seconds game = game {player1 = player1', player2 = player2', paddlesSpeed = speed'}
     where
         speed = paddlesSpeed game
@@ -244,7 +251,7 @@ paddleMove seconds player playerMove
         = seconds
     | otherwise = 0
 
-moveBall :: Float -> PongGame -> PongGame
+moveBall :: Float -> Game -> Game
 moveBall seconds game = game {ball = ball'}
     where
         b = ball game
@@ -264,7 +271,7 @@ moveBall seconds game = game {ball = ball'}
             | vx < 0    = vy - seconds * 10
             | otherwise = vy
 
-wallBounce :: PongGame -> PongGame
+wallBounce :: Game -> Game
 wallBounce game = game {ball = ball'}
     where
         radius = ballRadius b
@@ -286,17 +293,17 @@ wallCollision (_, y) radius = topCollision || bottomCollision
         topCollision    = y + radius >=  wallHeight - 5 * gameScale
         bottomCollision = y - radius <= -wallHeight + 5 * gameScale
 
-bonusHit :: PongGame -> PongGame
+bonusHit :: Game -> Game
 bonusHit game
     | bonusCollision game = bonusAction (bonus game) game
     | otherwise           = game
 
-bonusCollision :: PongGame -> Bool
+bonusCollision :: Game -> Bool
 bonusCollision game = isJust collision
     where
         collision = getCollision (base $ bonus game) (ball game)
 
-bounce :: PongGame -> PongGame
+bounce :: Game -> Game
 bounce game = game {ball = ball'}
     where
         ball' = b {ballVelocity = reflectedVector, ballPosition = bounceBallPosition}
@@ -324,5 +331,3 @@ corners player = [pos + size1, pos - size1, pos + size2, pos - size2]
         pos = playerPosition player
         size1 = playerSize player
         size2 = (fst size1, -(snd size1))
-
-
