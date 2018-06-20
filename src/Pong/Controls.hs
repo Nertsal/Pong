@@ -13,21 +13,21 @@ handleEvents :: Event -> PongGame -> PongGame
 handleEvents
   (EventKey (Char 'p') Down _ _)
   (GameInProgress game@Game{..})
-    = GameInProgress game { paused = not paused }
+    = GameInProgress game { gamePaused = not gamePaused }
 
-handleEvents _ game@(GameInProgress Game{ paused = True }) = game
+handleEvents _ game@(GameInProgress Game{ gamePaused = True }) = game
 
 handleEvents (EventKey (Char 's') keyState _ _) (GameInProgress game@Game{..})
-  = GameInProgress game {player1 = handleMoveKey DownM keyState player1 }
+  = GameInProgress game {gameLeftPlayer = handleMoveKey DownM keyState gameLeftPlayer }
 
 handleEvents (EventKey (Char 'w') keyState _ _) (GameInProgress game@Game{..})
-  = GameInProgress game { player1 = handleMoveKey UpM keyState player1 }
+  = GameInProgress game { gameLeftPlayer = handleMoveKey UpM keyState gameLeftPlayer }
 
 handleEvents (EventKey (SpecialKey KeyUp) keyState _ _) (GameInProgress game@Game{..})
-  = GameInProgress game { player2 = handleMoveKey UpM keyState player2 }
+  = GameInProgress game { gameRightPlayer = handleMoveKey UpM keyState gameRightPlayer }
 
 handleEvents (EventKey (SpecialKey KeyDown) keyState _ _) (GameInProgress game@Game{..})
-  = GameInProgress game { player2 = handleMoveKey DownM keyState player2 }
+  = GameInProgress game { gameRightPlayer = handleMoveKey DownM keyState gameRightPlayer }
 
 handleEvents (EventKey (MouseButton LeftButton) Down _ mouse) game
   = buttonsClick game mouse

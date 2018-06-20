@@ -30,15 +30,16 @@ instance Collidable Ball where
             centerProject = dotV ballPosition v
             r = ballRadius
 
-    importantPoints ball = [ballPosition ball]
+    importantPoints gameBall = [ballPosition gameBall]
 
     importantVectors _ = []
 
 data Player = Player
-    { playerPosition :: Point
-    , playerSize     :: Point
-    , playerRadius   :: Float
-    , playerMove     :: Move
+    { playerPosition     :: Point
+    , playerSize         :: Point
+    , playerRadius       :: Float
+    , playerMove         :: Move
+    , playerMaxSpeed :: Float
     }
 
 data Ball = Ball
@@ -54,13 +55,12 @@ data PongGame
   | GameOver GameResult
 
 data Game = Game
-  { ball         :: Ball
-  , player1      :: Player
-  , player2      :: Player
-  , bonus        :: Bonus
-  , paused       :: Bool
-  , gameButtons  :: [Button]
-  , paddlesSpeed :: Float
+  { gameBall        :: Ball
+  , gameLeftPlayer  :: Player
+  , gameRightPlayer :: Player
+  , gameBonus       :: Bonus
+  , gamePaused      :: Bool
+  , gameButtons     :: [Button]
   }
 
 data Menu = Menu
@@ -131,19 +131,18 @@ clickedButton button (x, y) =
 
 update :: Float -> PongGame -> PongGame
 update seconds (GameInProgress game)
-    | paused game = GameInProgress game
+    | gamePaused game = GameInProgress game
     | otherwise   = checkFinish $ bonusHit $ bounce $ wallBounce $ movePaddles seconds $ moveBall seconds game
 update _ game = game
 
 initialGameState :: PongGame
 initialGameState = GameInProgress Game
-    { ball = Ball ballLoc radius ballVel ballClr
-    , player1 = Player (-paddlePlace, 0) (psizex, psizey) pradius Stay
-    , player2 = Player (paddlePlace, 0) (psizex, psizey) (-pradius) Stay
-    , bonus = Bonus (Ball (100, -200) 10 (0, 0) bonusClr) baction
-    , paused = False
-    , gameButtons = []
-    , paddlesSpeed = 50}
+    { gameBall = Ball ballLoc radius ballVel ballClr
+    , gameLeftPlayer  = Player (-paddlePlace, 0) (psizex, psizey) pradius Stay 0
+    , gameRightPlayer = Player (paddlePlace, 0) (psizex, psizey) (-pradius) Stay 0
+    , gameBonus = Bonus (Ball (100, -200) 10 (0, 0) bonusClr) baction
+    , gamePaused = False
+    , gameButtons = []}
     where
         ballLoc = (0, 0)
         ballVel = (30 * gameScale, 30 * gameScale)
@@ -155,7 +154,7 @@ initialGameState = GameInProgress Game
 
         pradius = psizey
 
-        baction game = game {ball = Ball (0, 0) 50 (-50, -50) (dark red)}
+        baction game = game {gameBall = Ball (0, 0) 50 (-50, -50) (dark red)}
         bonusClr = dark green
 
 initialState :: PongGame
@@ -215,25 +214,26 @@ finish game
     | ballX < -paddlePlace - 20 * gameScale = Just "Right player"
     | otherwise                           = Nothing
     where
-        (ballX, _) = ballPosition $ ball game
+        (ballX, _) = ballPosition $ gameBall game
 
 movePaddles :: Float -> Game -> Game
-movePaddles seconds game = game {player1 = player1', player2 = player2', paddlesSpeed = speed'}
+movePaddles seconds game = game {gameLeftPlayer = gameLeftPlayer', gameRightPlayer = gameRightPlayer'}
     where
-        speed = paddlesSpeed game
-        p1 = playerPosition $ player1 game
-        p2 = playerPosition $ player2 game
+        speed = playerMaxSpeed $ gameLeftPlayer game
+        p1 = playerPosition $ gameLeftPlayer game
+        p2 = playerPosition $ gameRightPlayer game
 
         p1y = snd p1
         p2y = snd p2
 
-        p1' = speed * paddleMove seconds p1y (playerMove $ player1 game) * gameScale + p1y
-        p2' = speed * paddleMove seconds p2y (playerMove $ player2 game) * gameScale + p2y
+        p1' = speed * paddleMove seconds p1y (playerMove $ gameLeftPlayer game) * gameScale + p1y
+        p2' = speed * paddleMove seconds p2y (playerMove $ gameRightPlayer game) * gameScale + p2y
 
-        player1' = (player1 game) {playerPosition = (fst p1, p1')}
-        player2' = (player2 game) {playerPosition = (fst p2, p2')}
+        gameLeftPlayer' = (gameLeftPlayer game) {playerPosition = (fst p1, p1'), playerMaxSpeed = speed'}
+        gameRightPlayer' = (gameRightPlayer game) {playerPosition = (fst p2, p2'), playerMaxSpeed = speed'}
 
-        speed' = speed + seconds * 5
+        speed' = (max (abs $ fst ballVel) (abs $ snd ballVel)) + 10
+        ballVel = ballVelocity $ gameBall game
 
 paddleMove :: Float -> Float -> Move -> Float
 paddleMove seconds player playerMove
@@ -246,10 +246,10 @@ paddleMove seconds player playerMove
     | otherwise = 0
 
 moveBall :: Float -> Game -> Game
-moveBall seconds game = game {ball = ball'}
+moveBall seconds game = game {gameBall = gameBall'}
     where
-        b = ball game
-        ball' = b {ballVelocity = (vx', vy'), ballPosition = (x', y')}
+        b = gameBall game
+        gameBall' = b {ballVelocity = (vx', vy'), ballPosition = (x', y')}
         (x, y) = ballPosition b
         (vx, vy) = ballVelocity b
 
@@ -266,13 +266,13 @@ moveBall seconds game = game {ball = ball'}
             | otherwise = vy
 
 wallBounce :: Game -> Game
-wallBounce game = game {ball = ball'}
+wallBounce game = game {gameBall = gameBall'}
     where
         radius = ballRadius b
-        b = ball game
+        b = gameBall game
         (vx, vy) = ballVelocity b
         (_, by) = ballPosition b
-        ball' = b {ballVelocity = (vx, vy')}
+        gameBall' = b {ballVelocity = (vx, vy')}
 
         vy'
             | (by < 0) && (vy < 0) && collision
@@ -289,22 +289,22 @@ wallCollision (_, y) radius = topCollision || bottomCollision
 
 bonusHit :: Game -> Game
 bonusHit game
-    | bonusCollision game = bonusAction (bonus game) game
+    | bonusCollision game = bonusAction (gameBonus game) game
     | otherwise           = game
 
 bonusCollision :: Game -> Bool
 bonusCollision game = isJust collision
     where
-        collision = getCollision (base $ bonus game) (ball game)
+        collision = getCollision (base $ gameBonus game) (gameBall game)
 
 bounce :: Game -> Game
-bounce game = game {ball = ball'}
+bounce game = game {gameBall = gameBall'}
     where
-        ball' = b {ballVelocity = reflectedVector, ballPosition = bounceBallPosition}
+        gameBall' = b {ballVelocity = reflectedVector, ballPosition = bounceBallPosition}
         reflectedVector = reflectV ballV normalV
-        b = ball game
-        p1 = player1 game
-        p2 = player2 game
+        b = gameBall game
+        p1 = gameLeftPlayer game
+        p2 = gameRightPlayer game
         ballV = ballVelocity b
 
         bounceBallPosition = ballPosition b + mulSV (snd minVectorDepth) normalV

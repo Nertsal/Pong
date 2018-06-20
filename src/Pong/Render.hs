@@ -15,10 +15,10 @@ render (GameOver GameResult{..}) = pictures
     , drawButtons finishButtons
     , win winner]
 render (GameInProgress Game{..}) = pictures
-    [ ballPicture ball
-    , drawBonus bonus
+    [ ballPicture gameBall
+    , drawBonus gameBonus
     , walls
-    , paddles player1 player2
+    , paddles gameLeftPlayer gameRightPlayer
     ]
 
 drawBonus :: Bonus -> Picture
