@@ -2,7 +2,7 @@
 module Pong.Model where
 
 import           Data.List                  (minimumBy)
-import           Data.Maybe                 (catMaybes, isJust)
+import           Data.Maybe                 (catMaybes)
 import           Data.Ord                   (comparing)
 import           Graphics.Gloss
 import           Graphics.Gloss.Data.Vector (dotV, mulSV)
@@ -55,10 +55,10 @@ data PongGame
   | GameOver GameResult
 
 data Game = Game
-  { gameBall        :: Ball
+  { gameBalls       :: [Ball]
   , gameLeftPlayer  :: Player
   , gameRightPlayer :: Player
-  , gameBonus       :: Bonus
+  , gameBonuses     :: [Bonus]
   , gamePaused      :: Bool
   , gameButtons     :: [Button]
   }
@@ -132,30 +132,28 @@ clickedButton button (x, y) =
 update :: Float -> PongGame -> PongGame
 update seconds (GameInProgress game)
     | gamePaused game = GameInProgress game
-    | otherwise   = checkFinish $ bonusHit $ bounce $ wallBounce $ movePaddles seconds $ moveBall seconds game
+    | otherwise   = checkFinish $ bonusesHits $ bounce $ wallBounce $ movePaddles seconds $ moveGameBalls seconds game
 update _ game = game
 
 initialGameState :: PongGame
 initialGameState = GameInProgress Game
-    { gameBall = Ball ballLoc radius ballVel ballClr
+    { gameBalls = [startBall]
     , gameLeftPlayer  = Player (-paddlePlace, 0) (psizex, psizey) pradius Stay 0
     , gameRightPlayer = Player (paddlePlace, 0) (psizex, psizey) (-pradius) Stay 0
-    , gameBonus = Bonus (Ball (100, -200) 10 (0, 0) bonusClr) baction
+    , gameBonuses = []
     , gamePaused = False
     , gameButtons = []}
     where
+        startBall = Ball ballLoc radius ballVel startBallColor
         ballLoc = (0, 0)
         ballVel = (30 * gameScale, 30 * gameScale)
         radius = 10 * gameScale
-        ballClr = dark red
+        startBallColor = dark red
 
         psizex = 5 * gameScale
         psizey = 30 * gameScale
 
         pradius = psizey
-
-        baction game = game {gameBall = Ball (0, 0) 50 (-50, -50) (dark red)}
-        bonusClr = dark green
 
 initialState :: PongGame
 initialState = GameMenu Menu
@@ -201,39 +199,53 @@ toMenu _ = initialState
 
 checkFinish :: Game -> PongGame
 checkFinish game =
-  case finish game of
+  case finish (gameBalls game) of
     Just message -> GameOver GameResult
       { gameResultButtons = finishButtons
       , winner = message
       }
     Nothing -> GameInProgress game
 
-finish :: Game -> Maybe String
-finish game
+finish :: [Ball] -> Maybe String
+finish [] = Nothing
+finish (ball : balls) = case ballFinish ball of
+    Just message -> Just message
+    Nothing      -> finish balls
+
+ballFinish :: Ball -> Maybe String
+ballFinish ball
     | ballX >  paddlePlace + 20 * gameScale = Just "Left player"
     | ballX < -paddlePlace - 20 * gameScale = Just "Right player"
-    | otherwise                           = Nothing
+    | otherwise                             = Nothing
     where
-        (ballX, _) = ballPosition $ gameBall game
+        (ballX, _) = ballPosition ball
 
 movePaddles :: Float -> Game -> Game
-movePaddles seconds game = game {gameLeftPlayer = gameLeftPlayer', gameRightPlayer = gameRightPlayer'}
+movePaddles seconds game@Game{..} = game {gameLeftPlayer = gameLeftPlayer', gameRightPlayer = gameRightPlayer'}
     where
-        speed = playerMaxSpeed $ gameLeftPlayer game
-        p1 = playerPosition $ gameLeftPlayer game
-        p2 = playerPosition $ gameRightPlayer game
+        speed = playerMaxSpeed gameLeftPlayer
+        p1 = playerPosition gameLeftPlayer
+        p2 = playerPosition gameRightPlayer
 
         p1y = snd p1
         p2y = snd p2
 
-        p1' = speed * paddleMove seconds p1y (playerMove $ gameLeftPlayer game) * gameScale + p1y
-        p2' = speed * paddleMove seconds p2y (playerMove $ gameRightPlayer game) * gameScale + p2y
+        p1' = speed * paddleMove seconds p1y (playerMove gameLeftPlayer) * gameScale + p1y
+        p2' = speed * paddleMove seconds p2y (playerMove gameRightPlayer) * gameScale + p2y
 
-        gameLeftPlayer' = (gameLeftPlayer game) {playerPosition = (fst p1, p1'), playerMaxSpeed = speed'}
-        gameRightPlayer' = (gameRightPlayer game) {playerPosition = (fst p2, p2'), playerMaxSpeed = speed'}
+        gameLeftPlayer' = gameLeftPlayer {playerPosition = (fst p1, p1'), playerMaxSpeed = speed'}
+        gameRightPlayer' = gameRightPlayer {playerPosition = (fst p2, p2'), playerMaxSpeed = speed'}
 
-        speed' = (max (abs $ fst ballVel) (abs $ snd ballVel)) + 10
-        ballVel = ballVelocity $ gameBall game
+        speed' = maxBallsSpeed gameBalls - 20 * gameScale
+
+maxBallsSpeed :: [Ball] -> Float
+maxBallsSpeed [] = 0
+maxBallsSpeed balls = maximum $ map maxBallSpeed balls
+
+maxBallSpeed :: Ball -> Float
+maxBallSpeed ball = max (abs $ speedx) (abs $ speedy)
+    where
+        (speedx, speedy) = ballVelocity ball
 
 paddleMove :: Float -> Float -> Move -> Float
 paddleMove seconds player playerMove
@@ -245,41 +257,42 @@ paddleMove seconds player playerMove
         = seconds
     | otherwise = 0
 
-moveBall :: Float -> Game -> Game
-moveBall seconds game = game {gameBall = gameBall'}
-    where
-        b = gameBall game
-        gameBall' = b {ballVelocity = (vx', vy'), ballPosition = (x', y')}
-        (x, y) = ballPosition b
-        (vx, vy) = ballVelocity b
+moveGameBalls :: Float -> Game -> Game
+moveGameBalls seconds game = game { gameBalls = map (moveBall seconds) (gameBalls game) }
 
-        x' = x + vx * seconds
-        y' = y + vy * seconds
+moveBall :: Float -> Ball -> Ball
+moveBall seconds Ball{..} = 
+    Ball (movePosition ballPosition ballVelocity seconds) ballRadius 
+         (accelerateSpeed ballVelocity $ (seconds * 10, seconds * 10)) ballColor
 
-        vx'
-            | vx > 0    = vx + seconds * 10
-            | vx < 0    = vx - seconds * 10
-            | otherwise = vx
-        vy'
-            | vy > 0    = vy + seconds * 10
-            | vx < 0    = vy - seconds * 10
-            | otherwise = vy
+accelerateSpeed :: Point -> Point -> Point
+accelerateSpeed (speedx, speedy) (accx, accy) = (accelerate speedx accx, accelerate speedy accy)
+
+accelerate :: Float -> Float -> Float
+accelerate speed acc
+    | speed > 0 = speed + acc
+    | speed < 0 = speed - acc
+    | otherwise = speed
+
+movePosition :: Point -> Point -> Float -> Point
+movePosition (x, y) (speedx, speedy) seconds = (x + speedx * seconds, y + speedy * seconds)
 
 wallBounce :: Game -> Game
-wallBounce game = game {gameBall = gameBall'}
+wallBounce game = game {gameBalls = map wallBounceBall (gameBalls game)}
+
+wallBounceBall :: Ball -> Ball
+wallBounceBall ball@Ball{..} = ball{ ballVelocity = (vx, vy') } 
     where
-        radius = ballRadius b
-        b = gameBall game
-        (vx, vy) = ballVelocity b
-        (_, by) = ballPosition b
-        gameBall' = b {ballVelocity = (vx, vy')}
+        radius = ballRadius
+        (vx, vy) = ballVelocity
+        (_, by) = ballPosition
 
         vy'
             | (by < 0) && (vy < 0) && collision
                 || (by > 0) && (vy > 0) && collision = -vy
             | otherwise                              =  vy
 
-        collision = wallCollision (ballPosition b) radius
+        collision = wallCollision ballPosition radius
 
 wallCollision :: Point -> Radius -> Bool
 wallCollision (_, y) radius = topCollision || bottomCollision
@@ -287,34 +300,48 @@ wallCollision (_, y) radius = topCollision || bottomCollision
         topCollision    = y + radius >=  wallHeight - 5 * gameScale
         bottomCollision = y - radius <= -wallHeight + 5 * gameScale
 
-bonusHit :: Game -> Game
-bonusHit game
-    | bonusCollision game = bonusAction (gameBonus game) game
-    | otherwise           = game
+everyWith :: a -> [b] -> [(a, b)]
+everyWith _ [] = []
+everyWith a (b : bs) = (a, b) : everyWith a bs
 
-bonusCollision :: Game -> Bool
-bonusCollision game = isJust collision
-    where
-        collision = getCollision (base $ gameBonus game) (gameBall game)
+everyWithEvery :: [a] -> [b] -> [(a, b)]
+everyWithEvery [] _ = []
+everyWithEvery _ [] = []
+everyWithEvery (a : as) bs = everyWith a bs ++ everyWithEvery as bs
+
+bonusesHits :: Game -> Game
+bonusesHits game@Game{..} = foldl bonusHit game (everyWithEvery gameBonuses gameBalls)
+
+bonusHit :: Game -> (Bonus, Ball) -> Game
+bonusHit game (bonus, ball)
+    | bonusCollision bonus ball = bonusAction bonus game
+    | otherwise                 = game
+
+bonusCollision :: Bonus -> Ball -> Bool
+bonusCollision bonus ball = case getCollision (base bonus) ball of
+    Just _ -> True
+    Nothing        -> False
 
 bounce :: Game -> Game
-bounce game = game {gameBall = gameBall'}
+bounce game = game {gameBalls = map (\b -> bounceBall b game) (gameBalls game)}
+
+bounceBall :: Ball -> Game -> Ball
+bounceBall ball@Ball{..} game = bouncedBall
     where
-        gameBall' = b {ballVelocity = reflectedVector, ballPosition = bounceBallPosition}
+        bouncedBall = ball {ballVelocity = reflectedVector, ballPosition = bounceBallPosition}
         reflectedVector = reflectV ballV normalV
-        b = gameBall game
         p1 = gameLeftPlayer game
         p2 = gameRightPlayer game
-        ballV = ballVelocity b
+        ballV = ballVelocity
 
-        bounceBallPosition = ballPosition b + mulSV (snd minVectorDepth) normalV
+        bounceBallPosition = ballPosition + mulSV (snd minVectorDepth) normalV
         normalV = fst minVectorDepth
 
         minVectorDepth
             | null collisions = (0, 0)
             | otherwise       = minimumBy (comparing snd) collisions
 
-        collisions = catMaybes [getCollision p1 b, getCollision p2 b]
+        collisions = catMaybes [getCollision p1 ball, getCollision p2 ball]
 
 reflectV :: Vector -> Vector -> Vector
 reflectV va vb = va - mulSV (2 * dotV va vb) vb

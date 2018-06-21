@@ -15,14 +15,17 @@ render (GameOver GameResult{..}) = pictures
     , drawButtons finishButtons
     , win winner]
 render (GameInProgress Game{..}) = pictures
-    [ ballPicture gameBall
-    , drawBonus gameBonus
+    [ drawBalls gameBalls
+    , drawBonuses gameBonuses
     , walls
     , paddles gameLeftPlayer gameRightPlayer
     ]
 
+drawBonuses :: [Bonus] -> Picture
+drawBonuses bonuses = pictures (map drawBonus bonuses)
+
 drawBonus :: Bonus -> Picture
-drawBonus Bonus{..} = ballPicture base
+drawBonus Bonus{..} = drawBall base
 
 win :: String -> Picture
 win winner =
@@ -31,8 +34,11 @@ win winner =
     translate (-500) 300 $
     text $ winner ++ " wins"
 
-ballPicture :: Ball -> Picture
-ballPicture ball =
+drawBalls :: [Ball] -> Picture
+drawBalls balls = pictures (map drawBall balls)
+
+drawBall :: Ball -> Picture
+drawBall ball =
     translate f1 f2 $
     color bColor $
     circleSolid radius
