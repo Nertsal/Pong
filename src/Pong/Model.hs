@@ -72,9 +72,9 @@ data GameResult = GameResult
   }
 
 data Move
-  = UpM -- ^ Move up
-  | DownM -- ^ Move down
-  | Stay -- ^ Don't move
+  = UpM
+  | DownM
+  | Stay
   deriving (Show, Eq)
 
 data Button = Button
@@ -270,15 +270,18 @@ movePaddles seconds game@Game {..} =
       gameRightPlayer {playerPosition = (fst p2, p2'), playerMaxSpeed = speed'}
     speed' = maxBallsSpeed gameBalls - 20 * gameScale
 
+-- | Fastest ball's speed
 maxBallsSpeed :: [Ball] -> Float
 maxBallsSpeed [] = 0
-maxBallsSpeed balls = maximum $ map maxBallSpeed balls
+maxBallsSpeed balls = maximum $ map ballSpeed balls
 
-maxBallSpeed :: Ball -> Float
-maxBallSpeed ball = max (abs $ speedx) (abs $ speedy)
+-- | Ball's speed
+ballSpeed :: Ball -> Float
+ballSpeed ball = max (abs $ speedx) (abs $ speedy)
   where
     (speedx, speedy) = ballVelocity ball
 
+-- | Move player by seconds
 paddleMove :: Float -> Float -> Move -> Float
 paddleMove seconds player playerMove
   | (playerMove == DownM) && (player >= -wallHeight + 45 * gameScale) = -seconds
@@ -290,6 +293,7 @@ moveGameBalls :: Float -> Game -> Game
 moveGameBalls seconds game =
   game {gameBalls = map (moveBall seconds) (gameBalls game)}
 
+-- | Move ball by seconds
 moveBall :: Float -> Ball -> Ball
 moveBall seconds Ball {..} =
   Ball
@@ -308,6 +312,7 @@ accelerate speed acc
   | speed < 0 = speed - acc
   | otherwise = speed
 
+-- | Move point by seconds
 movePosition :: Point -> Point -> Float -> Point
 movePosition (x, y) (speedx, speedy) seconds =
   (x + speedx * seconds, y + speedy * seconds)
@@ -316,6 +321,7 @@ movePosition (x, y) (speedx, speedy) seconds =
 wallBounce :: Game -> Game
 wallBounce game = game {gameBalls = map wallBounceBall (gameBalls game)}
 
+-- | Bounce ball off the wall
 wallBounceBall :: Ball -> Ball
 wallBounceBall ball@Ball {..} = ball {ballVelocity = (vx, vy')}
   where
@@ -328,6 +334,7 @@ wallBounceBall ball@Ball {..} = ball {ballVelocity = (vx, vy')}
       | otherwise = vy
     collision = wallCollision ballPosition radius
 
+-- | Check ball's collision with the wall
 wallCollision :: Point -> Radius -> Bool
 wallCollision (_, y) radius = topCollision || bottomCollision
   where
@@ -352,6 +359,7 @@ bonusHit game (bonus, ball)
   | bonusCollision bonus ball = bonusAction bonus game
   | otherwise = game
 
+-- | Check balls' collisions with bonuses
 bonusCollision :: Bonus -> Ball -> Bool
 bonusCollision bonus ball =
   case getCollision (bonusBase bonus) ball of
@@ -362,6 +370,7 @@ bonusCollision bonus ball =
 bounce :: Game -> Game
 bounce game = game {gameBalls = map (\b -> bounceBall b game) (gameBalls game)}
 
+-- | Bounce ball
 bounceBall :: Ball -> Game -> Ball
 bounceBall ball@Ball {..} game = bouncedBall
   where
@@ -381,6 +390,7 @@ bounceBall ball@Ball {..} game = bouncedBall
 reflectV :: Vector -> Vector -> Vector
 reflectV va vb = va - mulSV (2 * dotV va vb) vb
 
+-- | Player's corners
 corners :: Player -> [Point]
 corners player = [pos + size1, pos - size1, pos + size2, pos - size2]
   where
