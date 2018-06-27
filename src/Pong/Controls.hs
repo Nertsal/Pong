@@ -5,6 +5,7 @@ module Pong.Controls where
 import Graphics.Gloss.Interface.Pure.Game
 import Pong.Model
 
+-- | Changes player's movement depending on input
 handleMoveKey :: Move -> KeyState -> Player -> Player
 handleMoveKey move keyState player =
   case keyState of

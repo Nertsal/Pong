@@ -7,6 +7,7 @@ import Graphics.Gloss
 import Pong.Const
 import Pong.Model
 
+-- | Draw current game state
 render :: PongGame -> Picture
 render (GameMenu _) =
   pictures [render initialGameState, drawButtons initialButtons]
@@ -20,17 +21,20 @@ render (GameInProgress Game {..}) =
     , paddles gameLeftPlayer gameRightPlayer
     ]
 
+-- | Draw every bonus in game
 drawBonuses :: [Bonus] -> Picture
 drawBonuses bonuses = pictures (map drawBonus bonuses)
 
 drawBonus :: Bonus -> Picture
-drawBonus Bonus {..} = drawBall base
+drawBonus Bonus {..} = drawBall bonusBase
 
+-- | Draw winner
 win :: String -> Picture
 win winner =
   scale (0.1 * gameScale) (0.1 * gameScale) $
   color white $ translate (-500) 300 $ text $ winner ++ " wins"
 
+-- | Draw every ball in game
 drawBalls :: [Ball] -> Picture
 drawBalls balls = pictures (map drawBall balls)
 
@@ -41,6 +45,7 @@ drawBall ball = translate f1 f2 $ color bColor $ circleSolid radius
     (f1, f2) = ballPosition ball
     radius = ballRadius ball
 
+-- | Draw walls
 walls :: Picture
 walls = pictures [wall wallHeight, wall (-wallHeight)]
 
@@ -51,6 +56,7 @@ wall wallOffset =
   where
     wallColor = white
 
+-- | Draw players
 paddles :: Player -> Player -> Picture
 paddles player1 player2 =
   pictures [paddle player1 rose 180, paddle player2 blue 0]

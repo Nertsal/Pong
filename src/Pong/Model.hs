@@ -72,64 +72,71 @@ data GameResult = GameResult
   }
 
 data Move
-  = UpM
-  | DownM
-  | Stay
+  = UpM -- ^ Move up
+  | DownM -- ^ Move down
+  | Stay -- ^ Don't move
   deriving (Show, Eq)
 
 data Button = Button
-  { picture :: Picture
-  , position :: RectPos
+  { buttonPicture :: Picture
+  , buttonPosition :: RectPos
   , buttonAction :: (PongGame -> PongGame)
   }
 
 data Bonus = Bonus
-  { base :: Ball
-  , bonusAction :: Game -> Game
+  { bonusBase :: Ball -- ^ Bonus hitbox
+  , bonusAction :: Game -> Game -- ^ Bonus hit action
   }
 
 type RectPos = (Point, Point)
 
 type Radius = Float
 
+-- | Draw given buttons
 drawButtons :: [Button] -> Picture
 drawButtons [] = blank
-drawButtons (button:buttons) = pictures [drawButton button, drawButtons buttons]
+drawButtons (button:buttons) = pictures [drawButton, drawButtons buttons]
+  where
+    drawButton = scale gameScale gameScale (buttonPicture button)
 
-drawButton :: Button -> Picture
-drawButton button = scale gameScale gameScale (picture button)
-
+-- | Act clicked buttons' actions
 click :: PongGame -> [Button] -> PongGame
 click game [] = game
 click game buttons = buttonClick but $ click game buts
   where
     (but:buts) = buttons
 
+-- | Mouse left click reaction
 buttonsClick :: PongGame -> Point -> PongGame
 buttonsClick game pos =
   case getButtons game of
     [] -> game
     buts -> click game $ clickedButtons buts pos
 
+-- | All buttons in game
 getButtons :: PongGame -> [Button]
 getButtons (GameInProgress game) = gameButtons game
 getButtons (GameMenu menu) = menuButtons menu
 getButtons (GameOver res) = gameResultButtons res
 
+-- | Act button's action
 buttonClick :: Button -> PongGame -> PongGame
 buttonClick button game = buttonAction button game
 
+-- | Choose clicked buttons
 clickedButtons :: [Button] -> Point -> [Button]
 clickedButtons [] _ = []
 clickedButtons (button:buttons) pos
   | clickedButton button pos = button : clickedButtons buttons pos
   | otherwise = clickedButtons buttons pos
 
+-- | Check if button is clicked
 clickedButton :: Button -> Point -> Bool
 clickedButton button (x, y) = (x >= bx) && (x <= bx1) && (y >= by1) && (y <= by)
   where
-    ((bx, by), (bx1, by1)) = position button
+    ((bx, by), (bx1, by1)) = buttonPosition button
 
+-- | Update game by seconds
 update :: Float -> PongGame -> PongGame
 update seconds (GameInProgress game)
   | gamePaused game = GameInProgress game
@@ -139,6 +146,7 @@ update seconds (GameInProgress game)
     bounce $ wallBounce $ movePaddles seconds $ moveGameBalls seconds game
 update _ game = game
 
+-- | First state of playing
 initialGameState :: PongGame
 initialGameState =
   GameInProgress
@@ -162,9 +170,6 @@ initialGameState =
     psizey = 30 * gameScale
     pradius = psizey
 
-initialState :: PongGame
-initialState = GameMenu Menu {menuButtons = initialButtons}
-
 initialButtons :: [Button]
 initialButtons = [startButton]
   where
@@ -173,16 +178,24 @@ initialButtons = [startButton]
         (startButtonPicture)
         ((-40 * gameScale, 15 * gameScale), (40 * gameScale, -15 * gameScale))
         start
+    
+    startButtonPicture =
+      pictures
+        [ color white (rectangleSolid 80 30)
+        , translate (-35) (-10) $ scale 0.21 0.21 (text "PLAY")
+        ]
 
-startButtonPicture :: Picture
-startButtonPicture =
-  pictures
-    [ color white (rectangleSolid 80 30)
-    , translate (-35) (-10) $ scale 0.21 0.21 (text "PLAY")
-    ]
+-- | First menu state
+initialState :: PongGame
+initialState = GameMenu Menu {menuButtons = initialButtons}
 
+-- | Start game
 start :: PongGame -> PongGame
 start _ = initialGameState
+
+-- | Go to menu
+toMenu :: PongGame -> PongGame
+toMenu _ = initialState
 
 finishButtons :: [Button]
 finishButtons = [restartButton, menuButton]
@@ -192,51 +205,50 @@ finishButtons = [restartButton, menuButton]
         (restartButtonPicture)
         ((-40 * gameScale, 15 * gameScale), (40 * gameScale, -15 * gameScale))
         start
+
+    restartButtonPicture :: Picture
+    restartButtonPicture =
+      pictures
+        [ color white (rectangleSolid 80 30)
+        , translate (-35) (-7) $ scale 0.13 0.13 (text "RESTART")
+        ]
+
     menuButton =
       Button
         (menuButtonPicture)
         ((-40 * gameScale, -35 * gameScale), (40 * gameScale, -65 * gameScale))
         toMenu
 
-restartButtonPicture :: Picture
-restartButtonPicture =
-  pictures
-    [ color white (rectangleSolid 80 30)
-    , translate (-35) (-7) $ scale 0.13 0.13 (text "RESTART")
-    ]
+    menuButtonPicture =
+      pictures
+        [ translate 0 (-50) $ color white (rectangleSolid 80 30)
+        , translate (-36) (-57) $ scale 0.12 0.12 (text "TO MENU")
+        ]
 
-menuButtonPicture :: Picture
-menuButtonPicture =
-  pictures
-    [ translate 0 (-50) $ color white (rectangleSolid 80 30)
-    , translate (-36) (-57) $ scale 0.12 0.12 (text "TO MENU")
-    ]
-
-toMenu :: PongGame -> PongGame
-toMenu _ = initialState
-
+-- | Check if game is finished
 checkFinish :: Game -> PongGame
 checkFinish game =
   case finish (gameBalls game) of
     Just message ->
       GameOver GameResult {gameResultButtons = finishButtons, winner = message}
     Nothing -> GameInProgress game
-
-finish :: [Ball] -> Maybe String
-finish [] = Nothing
-finish (ball:balls) =
-  case ballFinish ball of
-    Just message -> Just message
-    Nothing -> finish balls
-
-ballFinish :: Ball -> Maybe String
-ballFinish ball
-  | ballX > paddlePlace + 20 * gameScale = Just "Left player"
-  | ballX < -paddlePlace - 20 * gameScale = Just "Right player"
-  | otherwise = Nothing
   where
-    (ballX, _) = ballPosition ball
+    finish :: [Ball] -> Maybe String
+    finish [] = Nothing
+    finish (ball:balls) =
+      case ballFinish ball of
+        Just message -> Just message
+        Nothing -> finish balls
 
+    ballFinish :: Ball -> Maybe String
+    ballFinish ball
+      | ballX > paddlePlace + 20 * gameScale = Just "Left player"
+      | ballX < -paddlePlace - 20 * gameScale = Just "Right player"
+      | otherwise = Nothing
+      where
+        (ballX, _) = ballPosition ball
+
+-- | Move players by seconds
 movePaddles :: Float -> Game -> Game
 movePaddles seconds game@Game {..} =
   game {gameLeftPlayer = gameLeftPlayer', gameRightPlayer = gameRightPlayer'}
@@ -273,6 +285,7 @@ paddleMove seconds player playerMove
   | (playerMove == UpM) && (player <= wallHeight - 45 * gameScale) = seconds
   | otherwise = 0
 
+-- | Move balls by seconds
 moveGameBalls :: Float -> Game -> Game
 moveGameBalls seconds game =
   game {gameBalls = map (moveBall seconds) (gameBalls game)}
@@ -299,6 +312,7 @@ movePosition :: Point -> Point -> Float -> Point
 movePosition (x, y) (speedx, speedy) seconds =
   (x + speedx * seconds, y + speedy * seconds)
 
+-- | Bounce balls from walls
 wallBounce :: Game -> Game
 wallBounce game = game {gameBalls = map wallBounceBall (gameBalls game)}
 
@@ -340,10 +354,11 @@ bonusHit game (bonus, ball)
 
 bonusCollision :: Bonus -> Ball -> Bool
 bonusCollision bonus ball =
-  case getCollision (base bonus) ball of
+  case getCollision (bonusBase bonus) ball of
     Just _ -> True
     Nothing -> False
 
+-- | Bounce every object in the game
 bounce :: Game -> Game
 bounce game = game {gameBalls = map (\b -> bounceBall b game) (gameBalls game)}
 
@@ -373,9 +388,11 @@ corners player = [pos + size1, pos - size1, pos + size2, pos - size2]
     size1 = playerSize player
     size2 = (fst size1, -(snd size1))
 
+-- | Move key is pressed
 setPlayerMove :: Move -> Player -> Player
 setPlayerMove move player = player {playerMove = move}
 
+-- | Move key is unpressed
 unsetPlayerMove :: Move -> Player -> Player
 unsetPlayerMove move player@Player {playerMove = oldMove} =
   player {playerMove = newMove}
