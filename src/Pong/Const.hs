@@ -3,11 +3,11 @@
 -- | Game parameters and constants.
 module Pong.Const where
 
-import Graphics.Gloss
+import           Graphics.Gloss
 
 windowWidth, windowHeight, windowOffset :: Num a => a
-windowWidth = 1500
-windowHeight = 1000
+windowWidth = 640
+windowHeight = 480
 windowOffset = 10
 
 -- | Window size which we will focus on

@@ -2,13 +2,13 @@
 
 module Pong.Model where
 
-import Data.List (minimumBy)
-import Data.Maybe (catMaybes)
-import Data.Ord (comparing)
-import Graphics.Gloss
-import Graphics.Gloss.Data.Vector (dotV, mulSV)
-import Pong.Collidable
-import Pong.Const
+import           Data.List                  (minimumBy)
+import           Data.Maybe                 (catMaybes)
+import           Data.Ord                   (comparing)
+import           Graphics.Gloss
+import           Graphics.Gloss.Data.Vector (dotV, mulSV)
+import           Pong.Collidable
+import           Pong.Const
 
 instance Collidable Player where
   project player v = (minimum projects, maximum projects)
@@ -35,17 +35,17 @@ instance Collidable Ball where
 
 data Player = Player
   { playerPosition :: Point
-  , playerSize :: Point
-  , playerRadius :: Float
-  , playerMove :: Move
+  , playerSize     :: Point
+  , playerRadius   :: Float
+  , playerMove     :: Move
   , playerMaxSpeed :: Float
   }
 
 data Ball = Ball
   { ballPosition :: Point
-  , ballRadius :: Float
+  , ballRadius   :: Float
   , ballVelocity :: Point
-  , ballColor :: Color
+  , ballColor    :: Color
   }
 
 data PongGame
@@ -54,12 +54,12 @@ data PongGame
   | GameOver GameResult
 
 data Game = Game
-  { gameBalls :: [Ball]
-  , gameLeftPlayer :: Player
+  { gameBalls       :: [Ball]
+  , gameLeftPlayer  :: Player
   , gameRightPlayer :: Player
-  , gameBonuses :: [Bonus]
-  , gamePaused :: Bool
-  , gameButtons :: [Button]
+  , gameBonuses     :: [Bonus]
+  , gamePaused      :: Bool
+  , gameButtons     :: [Button]
   }
 
 data Menu = Menu
@@ -68,7 +68,7 @@ data Menu = Menu
 
 data GameResult = GameResult
   { gameResultButtons :: [Button]
-  , winner :: String
+  , winner            :: String
   }
 
 data Move
@@ -78,26 +78,19 @@ data Move
   deriving (Show, Eq)
 
 data Button = Button
-  { buttonPicture :: Picture
+  { buttonPicture  :: Picture
   , buttonPosition :: RectPos
-  , buttonAction :: (PongGame -> PongGame)
+  , buttonAction   :: (PongGame -> PongGame)
   }
 
 data Bonus = Bonus
-  { bonusBase :: Ball -- ^ Bonus hitbox
+  { bonusBase   :: Ball -- ^ Bonus hitbox
   , bonusAction :: Game -> Game -- ^ Bonus hit action
   }
 
 type RectPos = (Point, Point)
 
 type Radius = Float
-
--- | Draw given buttons
-drawButtons :: [Button] -> Picture
-drawButtons [] = blank
-drawButtons (button:buttons) = pictures [drawButton, drawButtons buttons]
-  where
-    drawButton = scale gameScale gameScale (buttonPicture button)
 
 -- | Act clicked buttons' actions
 click :: PongGame -> [Button] -> PongGame
@@ -110,14 +103,14 @@ click game buttons = buttonClick but $ click game buts
 buttonsClick :: PongGame -> Point -> PongGame
 buttonsClick game pos =
   case getButtons game of
-    [] -> game
+    []   -> game
     buts -> click game $ clickedButtons buts pos
 
 -- | All buttons in game
 getButtons :: PongGame -> [Button]
 getButtons (GameInProgress game) = gameButtons game
-getButtons (GameMenu menu) = menuButtons menu
-getButtons (GameOver res) = gameResultButtons res
+getButtons (GameMenu menu)       = menuButtons menu
+getButtons (GameOver res)        = gameResultButtons res
 
 -- | Act button's action
 buttonClick :: Button -> PongGame -> PongGame
@@ -178,7 +171,7 @@ initialButtons = [startButton]
         (startButtonPicture)
         ((-40 * gameScale, 15 * gameScale), (40 * gameScale, -15 * gameScale))
         start
-    
+
     startButtonPicture =
       pictures
         [ color white (rectangleSolid 80 30)
@@ -238,7 +231,7 @@ checkFinish game =
     finish (ball:balls) =
       case ballFinish ball of
         Just message -> Just message
-        Nothing -> finish balls
+        Nothing      -> finish balls
 
     ballFinish :: Ball -> Maybe String
     ballFinish ball
@@ -272,7 +265,7 @@ movePaddles seconds game@Game {..} =
 
 -- | Fastest ball's speed
 maxBallsSpeed :: [Ball] -> Float
-maxBallsSpeed [] = 0
+maxBallsSpeed []    = 0
 maxBallsSpeed balls = maximum $ map ballSpeed balls
 
 -- | Ball's speed
@@ -342,12 +335,12 @@ wallCollision (_, y) radius = topCollision || bottomCollision
     bottomCollision = y - radius <= -wallHeight + 5 * gameScale
 
 everyWith :: a -> [b] -> [(a, b)]
-everyWith _ [] = []
+everyWith _ []     = []
 everyWith a (b:bs) = (a, b) : everyWith a bs
 
 everyWithEvery :: [a] -> [b] -> [(a, b)]
-everyWithEvery [] _ = []
-everyWithEvery _ [] = []
+everyWithEvery [] _      = []
+everyWithEvery _ []      = []
 everyWithEvery (a:as) bs = everyWith a bs ++ everyWithEvery as bs
 
 bonusesHits :: Game -> Game
@@ -363,7 +356,7 @@ bonusHit game (bonus, ball)
 bonusCollision :: Bonus -> Ball -> Bool
 bonusCollision bonus ball =
   case getCollision (bonusBase bonus) ball of
-    Just _ -> True
+    Just _  -> True
     Nothing -> False
 
 -- | Bounce every object in the game

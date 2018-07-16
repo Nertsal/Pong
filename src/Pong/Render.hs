@@ -2,17 +2,17 @@
 
 module Pong.Render where
 
-import Graphics.Gloss
+import           Data.Function  ((&))
+import           Graphics.Gloss
 
-import Pong.Const
-import Pong.Model
+import           Pong.Const
+import           Pong.Model
 
 -- | Draw current game state
 render :: PongGame -> Picture
-render (GameMenu _) =
-  pictures [render initialGameState, drawButtons initialButtons]
-render (GameOver GameResult {..}) =
-  pictures [walls, drawButtons finishButtons, win winner]
+render (GameMenu Menu{..}) = drawButtons menuButtons
+render (GameOver GameResult{..}) =
+  pictures [walls, drawButtons gameResultButtons, win winner]
 render (GameInProgress Game {..}) =
   pictures
     [ drawBalls gameBalls
@@ -21,40 +21,44 @@ render (GameInProgress Game {..}) =
     , paddles gameLeftPlayer gameRightPlayer
     ]
 
+-- | Draw given buttons
+drawButtons :: [Button] -> Picture
+drawButtons = scale gameScale gameScale . pictures . map buttonPicture
+
 -- | Draw every bonus in game
 drawBonuses :: [Bonus] -> Picture
-drawBonuses bonuses = pictures (map drawBonus bonuses)
+drawBonuses = pictures . map drawBonus
 
 drawBonus :: Bonus -> Picture
 drawBonus Bonus {..} = drawBall bonusBase
 
 -- | Draw winner
 win :: String -> Picture
-win winner =
-  scale (0.1 * gameScale) (0.1 * gameScale) $
-  color white $ translate (-500) 300 $ text $ winner ++ " wins"
+win winner = text (winner ++ " wins")
+  & color white
+  & translate (-500) 300
+  & scale (0.1 * gameScale) (0.1 * gameScale)
 
 -- | Draw every ball in game
 drawBalls :: [Ball] -> Picture
-drawBalls balls = pictures (map drawBall balls)
+drawBalls = pictures . map drawBall
 
 drawBall :: Ball -> Picture
-drawBall ball = translate f1 f2 $ color bColor $ circleSolid radius
+drawBall Ball{..} = circleSolid ballRadius
+  & color ballColor
+  & translate x y
   where
-    bColor = ballColor ball
-    (f1, f2) = ballPosition ball
-    radius = ballRadius ball
+    (x, y) = ballPosition
 
 -- | Draw walls
 walls :: Picture
 walls = pictures [wall wallHeight, wall (-wallHeight)]
 
 wall :: Float -> Picture
-wall wallOffset =
-  translate 0 wallOffset $
-  scale gameScale gameScale $ color wallColor $ rectangleSolid 400 10
-  where
-    wallColor = white
+wall wallOffset = rectangleSolid 400 10 -- FIXME: constants
+  & color white                         -- FIXME: constant
+  & scale gameScale gameScale
+  & translate 0 wallOffset
 
 -- | Draw players
 paddles :: Player -> Player -> Picture
@@ -62,8 +66,10 @@ paddles player1 player2 =
   pictures [paddle player1 rose 180, paddle player2 blue 0]
 
 paddle :: Player -> Color -> Float -> Picture
-paddle player paddleColor rot =
-  translate wallOffset playerHeight $ rotate rot $ edge paddleColor
+paddle player paddleColor theta
+  = edge paddleColor
+  & rotate theta
+  & translate wallOffset playerHeight
   where
     (wallOffset, playerHeight) = playerPosition player
     (sizex, sizey) = playerSize player
